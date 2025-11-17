@@ -148,5 +148,16 @@ export async function apiDelete<T = any>(
   return apiCall<T>(endpoint, 'DELETE', options);
 }
 
+/**
+ * API Client Object (for convenience)
+ */
+export const apiClient = {
+  get: apiGet,
+  post: apiPost,
+  put: apiPut,
+  patch: apiPatch,
+  delete: apiDelete,
+};
+
 export { API_URL };
 export type { ApiResponse, ApiRequestOptions };

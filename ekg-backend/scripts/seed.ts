@@ -28,8 +28,11 @@ async function main() {
   try {
     const constraintsPath = path.resolve(__dirname, 'cypher', 'constraints.cypher');
     const seedCorePath = path.resolve(__dirname, 'cypher', 'seed-core.cypher');
+    const seedUsersPath = path.resolve(__dirname, 'cypher', 'seed-users.cypher');
+    
     await runCypherFile(driver, constraintsPath);
     await runCypherFile(driver, seedCorePath);
+    await runCypherFile(driver, seedUsersPath);
     console.log('🌱 Seed completed');
   } catch (err) {
     console.error('Seed error:', err);

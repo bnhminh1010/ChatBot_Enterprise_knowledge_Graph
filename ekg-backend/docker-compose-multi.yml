@@ -1,0 +1,33 @@
+version: "3.9"
+services:
+  neo4j-db1:
+    image: neo4j:5.23
+    container_name: ekg-neo4j-db1
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/neo4j123
+      NEO4JLABS_APOC: "true"
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+    volumes:
+      - ./neo4j-db1/data:/data
+      - ./neo4j-db1/import:/var/lib/neo4j/import
+
+  neo4j-db2:
+    image: neo4j:5.23
+    container_name: ekg-neo4j-db2
+    ports:
+      - "7475:7474"
+      - "7688:7687"
+    environment:
+      NEO4J_AUTH: myuser/mypassword123
+      NEO4JLABS_APOC: "true"
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+    volumes:
+      - ./neo4j-db2/data:/data
+      - ./neo4j-db2/import:/var/lib/neo4j/import
