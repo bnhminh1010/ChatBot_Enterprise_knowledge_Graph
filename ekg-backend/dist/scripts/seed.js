@@ -8,7 +8,9 @@ const neo4j_driver_1 = __importDefault(require("neo4j-driver"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 async function runCypherFile(driver, filePath) {
-    const session = driver.session({ database: 'neo4j' });
+    const session = driver.session({
+        database: process.env.NEO4J_DATABASE || 'neo4j',
+    });
     try {
         const content = fs_1.default.readFileSync(filePath, 'utf-8');
         const statements = content

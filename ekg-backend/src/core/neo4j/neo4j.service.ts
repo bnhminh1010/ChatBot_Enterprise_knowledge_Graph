@@ -27,14 +27,15 @@ export class Neo4jService implements OnModuleDestroy {
         maxConnectionPoolSize: 50,
       });
     } catch (err) {
-      this.logger.error('Failed to create Neo4j driver', err as any);
+      this.logger.error('Failed to create Neo4j driver', err);
       throw err;
     }
   }
 
   getSession(database = 'neo4j'): Session {
     this.ensureDriver();
-    return this.driver!.session({ database });
+    const db = process.env.NEO4J_DATABASE ?? database;
+    return this.driver!.session({ database: db });
   }
 
   async run<T = any>(cypher: string, params: Record<string, any> = {}) {
@@ -44,7 +45,7 @@ export class Neo4jService implements OnModuleDestroy {
       const res = await session.run(cypher, params);
       return res.records.map((r) => r.toObject()) as T[];
     } catch (err) {
-      this.logger.error('Neo4j query error:', err as any);
+      this.logger.error('Neo4j query error:', err);
       throw err;
     } finally {
       await session.close();
@@ -55,7 +56,7 @@ export class Neo4jService implements OnModuleDestroy {
     try {
       await this.driver?.close();
     } catch (err) {
-      this.logger.error('Error closing Neo4j driver', err as any);
+      this.logger.error('Error closing Neo4j driver', err);
     }
   }
 }

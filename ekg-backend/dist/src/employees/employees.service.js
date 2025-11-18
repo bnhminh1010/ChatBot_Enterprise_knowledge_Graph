@@ -25,7 +25,8 @@ let EmployeesService = class EmployeesService {
         try {
             const rows = await this.neo.run(`MATCH (e:NhanSu)
          OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
-         RETURN e{.*, skills: collect({ten:k.ten, level:r.level})} AS emp
+         WITH e, collect({ten:k.ten, level:r.level}) AS skills
+         RETURN e{.*, skills: skills} AS emp
          ORDER BY e.ten
          SKIP $skip LIMIT $limit`, { skip: neo4j_driver_1.default.int(skip), limit: neo4j_driver_1.default.int(limit) });
             return rows.map(r => r.emp);

@@ -62,8 +62,8 @@ let SearchController = class SearchController {
 exports.SearchController = SearchController;
 __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Tìm kiếm chung (NhanSu, KyNang, DuAn) với phân trang' }),
-    (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)()),
+    (0, common_1.Post)(),
+    __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_query_dto_1.SearchQueryDto]),
     __metadata("design:returntype", Promise)

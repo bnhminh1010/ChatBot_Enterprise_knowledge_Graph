@@ -28,7 +28,10 @@ let Neo4jService = Neo4jService_1 = class Neo4jService {
             throw new Error(msg);
         }
         try {
-            this.driver = neo4j_driver_1.default.driver(uri, neo4j_driver_1.default.auth.basic(user, password));
+            this.driver = neo4j_driver_1.default.driver(uri, neo4j_driver_1.default.auth.basic(user, password), {
+                connectionTimeout: 10000,
+                maxConnectionPoolSize: 50,
+            });
         }
         catch (err) {
             this.logger.error('Failed to create Neo4j driver', err);
@@ -37,7 +40,8 @@ let Neo4jService = Neo4jService_1 = class Neo4jService {
     }
     getSession(database = 'neo4j') {
         this.ensureDriver();
-        return this.driver.session({ database });
+        const db = process.env.NEO4J_DATABASE ?? database;
+        return this.driver.session({ database: db });
     }
     async run(cypher, params = {}) {
         this.ensureDriver();
@@ -45,6 +49,10 @@ let Neo4jService = Neo4jService_1 = class Neo4jService {
         try {
             const res = await session.run(cypher, params);
             return res.records.map((r) => r.toObject());
+        }
+        catch (err) {
+            this.logger.error('Neo4j query error:', err);
+            throw err;
         }
         finally {
             await session.close();
