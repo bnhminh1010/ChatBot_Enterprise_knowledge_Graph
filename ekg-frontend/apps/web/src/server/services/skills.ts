@@ -24,8 +24,8 @@ export interface CreateSkillDto {
  * Lấy danh sách tất cả kỹ năng
  */
 export async function getSkills(): Promise<Skill[]> {
-  const response = await apiGet<{ data: Skill[] }>('/skills');
-  return response.data || [];
+  const response = await apiGet<Skill[] | { data: Skill[] }>('/skills');
+  return Array.isArray(response) ? response : (response.data || []);
 }
 
 /**

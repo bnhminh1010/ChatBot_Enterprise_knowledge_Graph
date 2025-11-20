@@ -30,8 +30,9 @@ export interface UpdateDepartmentDto {
  * Lấy danh sách tất cả phòng ban
  */
 export async function getDepartments(): Promise<Department[]> {
-  const response = await apiGet<{ data: Department[] }>('/departments');
-  return response.data || [];
+  const response = await apiGet<Department[] | { data: Department[] }>('/departments');
+  // Backend trả về array trực tiếp hoặc object với data field
+  return Array.isArray(response) ? response : (response.data || []);
 }
 
 /**

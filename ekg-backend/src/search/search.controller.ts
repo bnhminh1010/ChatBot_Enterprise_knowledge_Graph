@@ -22,13 +22,13 @@ export class SearchController {
 
     const unionBlock = `CALL {
          MATCH (e:NhanSu) WHERE toLower(e.ten) CONTAINS toLower($q)
-         RETURN 'NhanSu' AS type, e{.*} AS data
+         RETURN 'Employee' AS type, {id: e.empId, name: e.ten, position: e.chucDanh} AS data
          UNION
          MATCH (k:KyNang) WHERE toLower(k.ten) CONTAINS toLower($q)
-         RETURN 'KyNang' AS type, k{.*} AS data
+         RETURN 'Skill' AS type, {id: k.ten, name: k.ten, category: COALESCE(k.category, '')} AS data
          UNION
          MATCH (p:DuAn) WHERE toLower(p.ten) CONTAINS toLower($q) OR toLower(p.key) CONTAINS toLower($q)
-         RETURN 'DuAn' AS type, p{.*} AS data
+         RETURN 'Project' AS type, {id: p.key, key: p.key, name: p.ten, status: COALESCE(p.trangThai, 'Active')} AS data
        }`;
 
     try {
@@ -51,8 +51,10 @@ export class SearchController {
         : Number(rawTotal);
 
       return { page, limit, total, items };
-    } catch {
-      throw new ServiceUnavailableException('Database connection error');
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Database connection error';
+      this.logger.error('Search error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
     }
   }
 }

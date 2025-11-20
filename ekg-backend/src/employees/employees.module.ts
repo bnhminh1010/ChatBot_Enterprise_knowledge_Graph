@@ -7,5 +7,6 @@ import { Neo4jModule } from '../core/neo4j/neo4j.module'; // <-- import Neo4jMod
   imports: [Neo4jModule],   // <-- thêm Neo4jModule vào imports
   controllers: [EmployeesController],
   providers: [EmployeesService],
+  exports: [EmployeesService],
 })
 export class EmployeesModule {}

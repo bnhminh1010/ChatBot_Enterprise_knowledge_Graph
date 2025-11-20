@@ -10,7 +10,13 @@ export class ProjectsService {
       const rows = await this.neo.run(
         `MATCH (p:DuAn)
          OPTIONAL MATCH (p)-[:SU_DUNG_CONG_NGHE]->(c:CongNghe)
-         RETURN p{.*, congNghe: collect(DISTINCT c.ten)} AS prj
+         RETURN {
+           id: p.key,
+           key: p.key,
+           name: p.ten,
+           status: COALESCE(p.trangThai, 'Active'),
+           technologies: collect(DISTINCT c.ten)
+         } AS prj
          ORDER BY p.ten`
       );
       return rows.map(r => r.prj);
@@ -27,10 +33,13 @@ export class ProjectsService {
          OPTIONAL MATCH (e:NhanSu)-[:LAM_DU_AN]->(p)
          OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]->(e)
          RETURN {
-           key: p.key, ten: p.ten, trangThai: p.trangThai,
-           congNghe: collect(DISTINCT tech.ten),
-           nhanSu: collect(DISTINCT e{ .empId, .ten, .chucDanh }),
-           phongBan: collect(DISTINCT pb{ .code, .ten })
+           id: p.key,
+           key: p.key,
+           name: p.ten,
+           status: COALESCE(p.trangThai, 'Active'),
+           technologies: collect(DISTINCT tech.ten),
+           employees: collect(DISTINCT e{ id: e.empId, empId: e.empId, name: e.ten, position: e.chucDanh }),
+           departments: collect(DISTINCT pb{ id: pb.code, code: pb.code, name: pb.ten })
          } AS full`,
         { key }
       );

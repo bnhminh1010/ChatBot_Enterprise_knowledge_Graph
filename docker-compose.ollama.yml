@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ekg-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Neo4j (if you want to run locally instead of cloud)
+  # neo4j:
+  #   image: neo4j:5.13-enterprise
+  #   container_name: ekg-neo4j
+  #   ports:
+  #     - "7687:7687"
+  #     - "7474:7474"
+  #   environment:
+  #     - NEO4J_AUTH=neo4j/password
+  #   volumes:
+  #     - neo4j-data:/var/lib/neo4j/data
+  #   restart: unless-stopped
+
+volumes:
+  ollama-data:
+    driver: local
+  # neo4j-data:
+  #   driver: local
+
+# Usage:
+# 1. Start services:
+#    docker-compose up -d
+#
+# 2. Download model:
+#    docker exec ekg-ollama ollama pull mistral
+#
+# 3. Verify:
+#    curl http://localhost:11434/api/tags
+#
+# 4. Stop:
+#    docker-compose down
+#
+# Available models:
+# - mistral:latest (7B, fast, good quality)
+# - neural-chat:latest (7B, optimized for chat)
+# - phi:latest (3.8B, lightweight)
+# - llama2:latest (13B, requires more VRAM)
+# - llama2:7b (7B version)

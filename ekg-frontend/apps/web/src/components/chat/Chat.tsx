@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { detectQueryType, handleQuery } from "@/lib/chat-helper";
+import { sendChatMessage } from "@/server/services/chat";
 
 export interface Message {
   id: string;
@@ -348,16 +348,13 @@ export default function Chat() {
     setError(null);
 
     try {
-      // Phát hiện loại query
-      const queryDetection = detectQueryType(content);
-      
-      // Xử lý query
-      const botContent = await handleQuery(queryDetection.type, queryDetection.value);
+      // Gọi API /chat
+      const response = await sendChatMessage(content);
 
       const botResponse: Message = {
         id: generateUniqueId(),
         role: "assistant",
-        content: botContent,
+        content: response.response,
         timestamp: new Date(),
         status: "delivered",
       };
@@ -368,6 +365,15 @@ export default function Chat() {
         { ...userMessage, status: "delivered" },
         botResponse,
       ]);
+
+      // Cập nhật title của chat nếu đó là chat mới
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === currentChatId && chat.title === "New Chat"
+            ? { ...chat, title: content.slice(0, 50) }
+            : chat
+        )
+      );
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Không thể gửi tin nhắn. Vui lòng thử lại.";

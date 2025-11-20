@@ -10,7 +10,12 @@ export class DepartmentsService {
     try {
       const rows = await this.neo.run(
         `MATCH (p:PhongBan)
-         RETURN p{.*} AS dept
+         RETURN {
+           id: p.code,
+           code: p.code,
+           name: p.ten,
+           description: COALESCE(p.description, '')
+         } AS dept
          ORDER BY p.ten`
       );
       return rows.map(r => r.dept);
@@ -22,7 +27,13 @@ export class DepartmentsService {
   async get(code: string) {
     try {
       const rows = await this.neo.run(
-        `MATCH (p:PhongBan {code:$code}) RETURN p{.*} AS dept`,
+        `MATCH (p:PhongBan {code:$code}) 
+         RETURN {
+           id: p.code,
+           code: p.code,
+           name: p.ten,
+           description: COALESCE(p.description, '')
+         } AS dept`,
         { code }
       );
       if (!rows[0]) throw new NotFoundException('Department not found');

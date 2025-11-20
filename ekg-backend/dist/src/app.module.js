@@ -14,6 +14,8 @@ const projects_module_1 = require("./projects/projects.module");
 const departments_module_1 = require("./departments/departments.module");
 const skills_module_1 = require("./skills/skills.module");
 const search_controller_1 = require("./search/search.controller");
+const chat_module_1 = require("./chat/chat.module");
+const ai_module_1 = require("./ai/ai.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -25,6 +27,8 @@ exports.AppModule = AppModule = __decorate([
             projects_module_1.ProjectsModule,
             departments_module_1.DepartmentsModule,
             skills_module_1.SkillsModule,
+            ai_module_1.AiModule,
+            chat_module_1.ChatModule,
         ],
         controllers: [search_controller_1.SearchController],
         providers: [],

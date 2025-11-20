@@ -20,7 +20,12 @@ let DepartmentsService = class DepartmentsService {
     async list() {
         try {
             const rows = await this.neo.run(`MATCH (p:PhongBan)
-         RETURN p{.*} AS dept
+         RETURN {
+           id: p.code,
+           code: p.code,
+           name: p.ten,
+           description: COALESCE(p.description, '')
+         } AS dept
          ORDER BY p.ten`);
             return rows.map(r => r.dept);
         }
@@ -30,7 +35,13 @@ let DepartmentsService = class DepartmentsService {
     }
     async get(code) {
         try {
-            const rows = await this.neo.run(`MATCH (p:PhongBan {code:$code}) RETURN p{.*} AS dept`, { code });
+            const rows = await this.neo.run(`MATCH (p:PhongBan {code:$code}) 
+         RETURN {
+           id: p.code,
+           code: p.code,
+           name: p.ten,
+           description: COALESCE(p.description, '')
+         } AS dept`, { code });
             if (!rows[0])
                 throw new common_1.NotFoundException('Department not found');
             return rows[0].dept;

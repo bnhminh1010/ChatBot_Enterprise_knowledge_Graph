@@ -1,0 +1,32 @@
+import { QueryClassifierService } from '../ai/query-classifier.service';
+import { OllamaService } from '../ai/ollama.service';
+import { ChromaDBService } from '../ai/chroma-db.service';
+import { GeminiService } from '../ai/gemini.service';
+import { EmployeesService } from '../employees/employees.service';
+import { SkillsService } from '../skills/skills.service';
+import { DepartmentsService } from '../departments/departments.service';
+import { ProjectsService } from '../projects/projects.service';
+import { SearchService } from '../search/search.service';
+export declare class ChatService {
+    private queryClassifier;
+    private ollamaService;
+    private chromaDBService;
+    private geminiService;
+    private employeesService;
+    private skillsService;
+    private departmentsService;
+    private projectsService;
+    private searchService;
+    private readonly logger;
+    constructor(queryClassifier: QueryClassifierService, ollamaService: OllamaService, chromaDBService: ChromaDBService, geminiService: GeminiService, employeesService: EmployeesService, skillsService: SkillsService, departmentsService: DepartmentsService, projectsService: ProjectsService, searchService: SearchService);
+    processQuery(message: string): Promise<{
+        response: string;
+        queryType: string;
+        queryLevel: 'simple' | 'medium' | 'complex';
+        processingTime: number;
+    }>;
+    private handleSimpleQuery;
+    private handleMediumQuery;
+    private handleComplexQuery;
+    indexEntitiesToChromaDB(): Promise<void>;
+}

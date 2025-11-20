@@ -25,8 +25,14 @@ let EmployeesService = class EmployeesService {
         try {
             const rows = await this.neo.run(`MATCH (e:NhanSu)
          OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
-         WITH e, collect({ten:k.ten, level:r.level}) AS skills
-         RETURN e{.*, skills: skills} AS emp
+         WITH e, collect({name:k.ten, level:r.level}) AS skills
+         RETURN {
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           skills: skills
+         } AS emp
          ORDER BY e.ten
          SKIP $skip LIMIT $limit`, { skip: neo4j_driver_1.default.int(skip), limit: neo4j_driver_1.default.int(limit) });
             return rows.map(r => r.emp);
@@ -44,10 +50,13 @@ let EmployeesService = class EmployeesService {
          OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
          OPTIONAL MATCH (e)-[:LAM_DU_AN]->(p:DuAn)
          RETURN {
-           empId:e.empId, ten:e.ten, chucDanh:e.chucDanh,
-           phongBan: pb.ten,
-           kyNang: collect({ten:k.ten, level:r.level}),
-           duAn: collect(DISTINCT {key:p.key, ten:p.ten})
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           department: pb.ten,
+           skills: collect({name:k.ten, level:r.level}),
+           projects: collect(DISTINCT {key:p.key, name:p.ten})
          } AS emp`, { empId });
             if (!rows[0])
                 throw new common_1.NotFoundException('Employee not found');

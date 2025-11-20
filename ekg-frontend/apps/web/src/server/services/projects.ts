@@ -30,8 +30,8 @@ export interface UpdateProjectDto {
  * Lấy danh sách tất cả dự án
  */
 export async function getProjects(): Promise<Project[]> {
-  const response = await apiGet<{ data: Project[] }>('/projects');
-  return response.data || [];
+  const response = await apiGet<Project[] | { data: Project[] }>('/projects');
+  return Array.isArray(response) ? response : (response.data || []);
 }
 
 /**

@@ -8,7 +8,15 @@ export class SkillsService {
 
   async list() {
     try {
-      const rows = await this.neo.run(`MATCH (k:KyNang) RETURN k{.*} AS skill ORDER BY k.ten`);
+      const rows = await this.neo.run(
+        `MATCH (k:KyNang) 
+         RETURN {
+           id: k.ten,
+           name: k.ten,
+           category: COALESCE(k.category, '')
+         } AS skill 
+         ORDER BY k.ten`
+      );
       return rows.map(r => r.skill);
     } catch (e) {
       throw new ServiceUnavailableException('Database connection error');
@@ -33,7 +41,12 @@ export class SkillsService {
   async search(term: string) {
     try {
       const rows = await this.neo.run(
-        `MATCH (k:KyNang) WHERE toLower(k.ten) CONTAINS toLower($term) RETURN k{.*} AS skill`,
+        `MATCH (k:KyNang) WHERE toLower(k.ten) CONTAINS toLower($term) 
+         RETURN {
+           id: k.ten,
+           name: k.ten,
+           category: COALESCE(k.category, '')
+         } AS skill`,
         { term }
       );
       return rows.map(r => r.skill);

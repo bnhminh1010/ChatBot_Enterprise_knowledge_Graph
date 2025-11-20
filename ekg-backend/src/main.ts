@@ -5,7 +5,12 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create(AppModule, {
+    cors: {
+      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      credentials: true,
+    },
+  });
 
   // Dùng ValidationPipe để tự động validate DTOs
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -20,8 +25,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT || 3000);
-  console.log(`🚀 API ready at http://localhost:${process.env.PORT || 3000}/docs`);
+  await app.listen(process.env.PORT || 3002);
+  console.log(`🚀 API ready at http://localhost:${process.env.PORT || 3002}/docs`);
 }
 
 bootstrap();

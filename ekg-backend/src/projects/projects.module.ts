@@ -7,5 +7,6 @@ import { Neo4jModule } from '../core/neo4j/neo4j.module';
   imports: [Neo4jModule],
   providers: [ProjectsService],
   controllers: [ProjectsController],
+  exports: [ProjectsService],
 })
 export class ProjectsModule {}

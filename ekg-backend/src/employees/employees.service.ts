@@ -1,10 +1,12 @@
 // src/employees/employees.service.ts
-import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, NotFoundException, ServiceUnavailableException, Logger } from '@nestjs/common';
 import neo4j from 'neo4j-driver';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+  
   constructor(private neo: Neo4jService) {}
 
   async list(skip = 0, limit = 20) {
@@ -12,8 +14,14 @@ export class EmployeesService {
       const rows = await this.neo.run(
         `MATCH (e:NhanSu)
          OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
-         WITH e, collect({ten:k.ten, level:r.level}) AS skills
-         RETURN e{.*, skills: skills} AS emp
+         WITH e, collect({name:k.ten, level:r.level}) AS skills
+         RETURN {
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           skills: skills
+         } AS emp
          ORDER BY e.ten
          SKIP $skip LIMIT $limit`,
         { skip: neo4j.int(skip), limit: neo4j.int(limit) }
@@ -21,7 +29,9 @@ export class EmployeesService {
       return rows.map(r => r.emp);
     } catch (e) {
       if (e instanceof NotFoundException) throw e;
-      throw new ServiceUnavailableException('Database connection error');
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Employees list error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
     }
   }
 
@@ -33,10 +43,13 @@ export class EmployeesService {
          OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
          OPTIONAL MATCH (e)-[:LAM_DU_AN]->(p:DuAn)
          RETURN {
-           empId:e.empId, ten:e.ten, chucDanh:e.chucDanh,
-           phongBan: pb.ten,
-           kyNang: collect({ten:k.ten, level:r.level}),
-           duAn: collect(DISTINCT {key:p.key, ten:p.ten})
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           department: pb.ten,
+           skills: collect({name:k.ten, level:r.level}),
+           projects: collect(DISTINCT {key:p.key, name:p.ten})
          } AS emp`,
         { empId }
       );
@@ -44,7 +57,9 @@ export class EmployeesService {
       return rows[0].emp;
     } catch (e) {
       if (e instanceof NotFoundException) throw e;
-      throw new ServiceUnavailableException('Database connection error');
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Get employee error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
     }
   }
 
@@ -59,7 +74,9 @@ export class EmployeesService {
       );
       return { ok: true };
     } catch (e) {
-      throw new ServiceUnavailableException('Database connection error');
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Create employee error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
     }
   }
 
@@ -74,7 +91,9 @@ export class EmployeesService {
       );
       return rows;
     } catch (e) {
-      throw new ServiceUnavailableException('Database connection error');
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Top skills error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
     }
   }
 }

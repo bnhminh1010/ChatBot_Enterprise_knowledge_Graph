@@ -5,6 +5,8 @@ import { ProjectsModule } from './projects/projects.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { SkillsModule } from './skills/skills.module';
 import { SearchController } from './search/search.controller';
+import { ChatModule } from './chat/chat.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -13,6 +15,8 @@ import { SearchController } from './search/search.controller';
     ProjectsModule,
     DepartmentsModule,
     SkillsModule,
+    AiModule,
+    ChatModule,
   ],
   controllers: [SearchController],
   providers: [],

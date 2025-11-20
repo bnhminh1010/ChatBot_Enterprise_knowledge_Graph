@@ -33,8 +33,8 @@ export interface UpdateEmployeeDto {
  * Lấy danh sách tất cả nhân viên
  */
 export async function getEmployees(): Promise<Employee[]> {
-  const response = await apiGet<{ data: Employee[] }>('/employees');
-  return response.data || [];
+  const response = await apiGet<Employee[] | { data: Employee[] }>('/employees');
+  return Array.isArray(response) ? response : (response.data || []);
 }
 
 /**

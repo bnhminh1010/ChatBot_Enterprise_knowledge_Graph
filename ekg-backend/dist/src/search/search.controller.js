@@ -33,13 +33,13 @@ let SearchController = class SearchController {
         const skip = (page - 1) * limit;
         const unionBlock = `CALL {
          MATCH (e:NhanSu) WHERE toLower(e.ten) CONTAINS toLower($q)
-         RETURN 'NhanSu' AS type, e{.*} AS data
+         RETURN 'Employee' AS type, {id: e.empId, name: e.ten, position: e.chucDanh} AS data
          UNION
          MATCH (k:KyNang) WHERE toLower(k.ten) CONTAINS toLower($q)
-         RETURN 'KyNang' AS type, k{.*} AS data
+         RETURN 'Skill' AS type, {id: k.ten, name: k.ten, category: COALESCE(k.category, '')} AS data
          UNION
          MATCH (p:DuAn) WHERE toLower(p.ten) CONTAINS toLower($q) OR toLower(p.key) CONTAINS toLower($q)
-         RETURN 'DuAn' AS type, p{.*} AS data
+         RETURN 'Project' AS type, {id: p.key, key: p.key, name: p.ten, status: COALESCE(p.trangThai, 'Active')} AS data
        }`;
         try {
             const itemsRows = await this.neo.run(`${unionBlock}
