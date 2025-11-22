@@ -13,6 +13,17 @@ let QueryClassifierService = class QueryClassifierService {
         const lower = message.toLowerCase().trim();
         if (/danh sách|list|tất cả|all/i.test(lower) &&
             /nhân viên|employee|staff|people/i.test(lower)) {
+            const department = this.extractDepartmentName(message);
+            const skill = this.extractSkillName(message);
+            const project = this.extractProjectName(message);
+            if (department || skill || project) {
+                return {
+                    level: 'medium',
+                    type: 'list-employees-filtered',
+                    keywords: ['list', 'employees', 'filtered'],
+                    filters: { department, skill, project },
+                };
+            }
             return {
                 level: 'simple',
                 type: 'list-employees',
@@ -144,6 +155,52 @@ let QueryClassifierService = class QueryClassifierService {
         if (quoted)
             return quoted[1];
         return cleaned || '';
+    }
+    extractDepartmentName(message) {
+        const lower = message.toLowerCase();
+        const patterns = [
+            /phòng\s*ban\s+([a-zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\w]+)/i,
+            /phòng\s+([a-zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\w]+)/i,
+            /department\s+([a-z\w]+)/i,
+            /dept\s+([a-z\w]+)/i,
+        ];
+        for (const pattern of patterns) {
+            const match = lower.match(pattern);
+            if (match && match[1]) {
+                return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+            }
+        }
+        return undefined;
+    }
+    extractSkillName(message) {
+        const lower = message.toLowerCase();
+        const patterns = [
+            /kỹ\s*năng\s+([a-z0-9\-\+\.]+)/i,
+            /skill\s+([a-z0-9\-\+\.]+)/i,
+            /biết\s+([a-z0-9\-\+\.]+)/i,
+            /có\s+([a-z0-9\-\+\.]+)(?:\s|$)/i,
+        ];
+        for (const pattern of patterns) {
+            const match = lower.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+        return undefined;
+    }
+    extractProjectName(message) {
+        const lower = message.toLowerCase();
+        const patterns = [
+            /dự\s*án\s+([a-z0-9\-]+)/i,
+            /project\s+([a-z0-9\-]+)/i,
+        ];
+        for (const pattern of patterns) {
+            const match = lower.match(pattern);
+            if (match && match[1]) {
+                return match[1].toUpperCase();
+            }
+        }
+        return undefined;
     }
 };
 exports.QueryClassifierService = QueryClassifierService;

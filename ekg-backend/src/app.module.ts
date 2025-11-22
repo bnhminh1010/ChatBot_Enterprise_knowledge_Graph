@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Neo4jModule } from './core/neo4j/neo4j.module';
 import { EmployeesModule } from './employees/employees.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -10,6 +11,12 @@ import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
+    // Cache configuration - in-memory store
+    CacheModule.register({
+      isGlobal: true, // Make cache available globally
+      ttl: 600, // Default TTL: 10 minutes (in seconds)
+      max: 100, // Maximum number of items in cache
+    }),
     Neo4jModule,
     EmployeesModule,
     ProjectsModule,

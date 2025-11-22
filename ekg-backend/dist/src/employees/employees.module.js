@@ -19,6 +19,7 @@ exports.EmployeesModule = EmployeesModule = __decorate([
         imports: [neo4j_module_1.Neo4jModule],
         controllers: [employees_controller_1.EmployeesController],
         providers: [employees_service_1.EmployeesService],
+        exports: [employees_service_1.EmployeesService],
     })
 ], EmployeesModule);
 //# sourceMappingURL=employees.module.js.map

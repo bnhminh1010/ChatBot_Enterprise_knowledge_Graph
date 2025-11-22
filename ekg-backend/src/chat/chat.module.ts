@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
+import { CacheService } from './services/cache.service';
+import { MetricsService } from './services/metrics.service';
 import { AiModule } from '../ai/ai.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { SkillsModule } from '../skills/skills.module';
@@ -20,7 +22,7 @@ import { Neo4jModule } from '../core/neo4j/neo4j.module';
     Neo4jModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, CacheService, MetricsService],
   exports: [ChatService],
 })
 export class ChatModule {}

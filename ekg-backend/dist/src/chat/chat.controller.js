@@ -16,12 +16,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatController = void 0;
 const common_1 = require("@nestjs/common");
 const chat_service_1 = require("./chat.service");
+const metrics_service_1 = require("./services/metrics.service");
 const chat_query_dto_1 = require("./dto/chat-query.dto");
+const neo4j_service_1 = require("../core/neo4j/neo4j.service");
 let ChatController = ChatController_1 = class ChatController {
     chatService;
+    metricsService;
+    neo4jService;
     logger = new common_1.Logger(ChatController_1.name);
-    constructor(chatService) {
+    constructor(chatService, metricsService, neo4jService) {
         this.chatService = chatService;
+        this.metricsService = metricsService;
+        this.neo4jService = neo4jService;
     }
     async processQuery(dto) {
         try {
@@ -51,13 +57,33 @@ let ChatController = ChatController_1 = class ChatController {
         }
     }
     async health() {
-        return {
-            status: 'ok',
-            services: {
-                neo4j: true,
-                gemini: true,
-            },
+        let neo4jStatus;
+        try {
+            neo4jStatus = await this.neo4jService.verifyConnection();
+        }
+        catch (error) {
+            neo4jStatus = `Error: ${error instanceof Error ? error.message : 'Unknown'}`;
+        }
+        const envStatus = {
+            NEO4J_URI: !!process.env.NEO4J_URI,
+            NEO4J_USER: !!process.env.NEO4J_USER,
+            NEO4J_PASSWORD: !!process.env.NEO4J_PASSWORD,
+            GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
         };
+        const services = {
+            neo4j: neo4jStatus,
+            env: envStatus,
+        };
+        const allHealthy = neo4jStatus === true &&
+            Object.values(envStatus).every((x) => x === true);
+        return {
+            status: allHealthy ? 'ok' : 'degraded',
+            services,
+            timestamp: new Date(),
+        };
+    }
+    getMetrics() {
+        return this.metricsService.getStats();
     }
 };
 exports.ChatController = ChatController;
@@ -80,8 +106,16 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ChatController.prototype, "health", null);
+__decorate([
+    (0, common_1.Get)('metrics'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], ChatController.prototype, "getMetrics", null);
 exports.ChatController = ChatController = ChatController_1 = __decorate([
     (0, common_1.Controller)('chat'),
-    __metadata("design:paramtypes", [chat_service_1.ChatService])
+    __metadata("design:paramtypes", [chat_service_1.ChatService,
+        metrics_service_1.MetricsService,
+        neo4j_service_1.Neo4jService])
 ], ChatController);
 //# sourceMappingURL=chat.controller.js.map

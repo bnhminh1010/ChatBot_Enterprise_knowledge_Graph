@@ -26,6 +26,7 @@ export declare class ChatService {
         processingTime: number;
     }>;
     private handleSimpleQuery;
+    private handleFilteredQuery;
     private handleMediumQuery;
     private handleComplexQuery;
     indexEntitiesToChromaDB(): Promise<void>;

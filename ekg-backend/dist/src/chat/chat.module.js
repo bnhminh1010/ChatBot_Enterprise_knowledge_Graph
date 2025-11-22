@@ -10,12 +10,15 @@ exports.ChatModule = void 0;
 const common_1 = require("@nestjs/common");
 const chat_controller_1 = require("./chat.controller");
 const chat_service_1 = require("./chat.service");
+const cache_service_1 = require("./services/cache.service");
+const metrics_service_1 = require("./services/metrics.service");
 const ai_module_1 = require("../ai/ai.module");
 const employees_module_1 = require("../employees/employees.module");
 const skills_module_1 = require("../skills/skills.module");
 const departments_module_1 = require("../departments/departments.module");
 const projects_module_1 = require("../projects/projects.module");
 const search_module_1 = require("../search/search.module");
+const neo4j_module_1 = require("../core/neo4j/neo4j.module");
 let ChatModule = class ChatModule {
 };
 exports.ChatModule = ChatModule;
@@ -28,9 +31,10 @@ exports.ChatModule = ChatModule = __decorate([
             departments_module_1.DepartmentsModule,
             projects_module_1.ProjectsModule,
             search_module_1.SearchModule,
+            neo4j_module_1.Neo4jModule,
         ],
         controllers: [chat_controller_1.ChatController],
-        providers: [chat_service_1.ChatService],
+        providers: [chat_service_1.ChatService, cache_service_1.CacheService, metrics_service_1.MetricsService],
         exports: [chat_service_1.ChatService],
     })
 ], ChatModule);

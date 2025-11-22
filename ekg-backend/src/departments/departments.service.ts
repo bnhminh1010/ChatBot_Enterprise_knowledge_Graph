@@ -44,6 +44,31 @@ export class DepartmentsService {
     }
   }
 
+  /**
+   * NEW: Find department by name (fuzzy matching)
+   */
+  async findByName(name: string) {
+    try {
+      const rows = await this.neo.run(
+        `MATCH (p:PhongBan)
+         WHERE toLower(p.ten) CONTAINS toLower($name) OR toLower(p.code) CONTAINS toLower($name)
+         RETURN {
+           id: p.code,
+           code: p.code,
+           name: p.ten,
+           description: COALESCE(p.description, '')
+         } AS dept
+         LIMIT 1`,
+        { name }
+      );
+      if (!rows[0]) throw new NotFoundException(`Department "${name}" not found`);
+      return rows[0].dept;
+    } catch (e) {
+      if (e instanceof NotFoundException) throw e;
+      throw new ServiceUnavailableException('Database connection error');
+    }
+  }
+
   async create(dto: { code: string; ten: string }) {
     try {
       await this.neo.run(

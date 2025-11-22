@@ -1,5 +1,5 @@
 // ekg-backend/src/search/search.controller.ts
-import { Controller, Post, Body, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Post, Body, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
 import neo4j from 'neo4j-driver';
@@ -8,6 +8,8 @@ import { SearchQueryDto } from './dto/search-query.dto';
 @ApiTags('Search')
 @Controller('search')
 export class SearchController {
+  private readonly logger = new Logger(SearchController.name);
+
   constructor(private neo: Neo4jService) {}
 
   @ApiOperation({ summary: 'Tìm kiếm chung (NhanSu, KyNang, DuAn) với phân trang' })

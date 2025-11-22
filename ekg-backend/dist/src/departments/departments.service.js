@@ -52,6 +52,27 @@ let DepartmentsService = class DepartmentsService {
             throw new common_1.ServiceUnavailableException('Database connection error');
         }
     }
+    async findByName(name) {
+        try {
+            const rows = await this.neo.run(`MATCH (p:PhongBan)
+         WHERE toLower(p.ten) CONTAINS toLower($name) OR toLower(p.code) CONTAINS toLower($name)
+         RETURN {
+           id: p.code,
+           code: p.code,
+           name: p.ten,
+           description: COALESCE(p.description, '')
+         } AS dept
+         LIMIT 1`, { name });
+            if (!rows[0])
+                throw new common_1.NotFoundException(`Department "${name}" not found`);
+            return rows[0].dept;
+        }
+        catch (e) {
+            if (e instanceof common_1.NotFoundException)
+                throw e;
+            throw new common_1.ServiceUnavailableException('Database connection error');
+        }
+    }
     async create(dto) {
         try {
             await this.neo.run(`MERGE (p:PhongBan {code:$code}) ON CREATE SET p.ten=$ten`, dto);

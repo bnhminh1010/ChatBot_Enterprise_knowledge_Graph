@@ -5,6 +5,13 @@ export interface QueryClassificationResult {
   type: string;
   value?: string;
   keywords: string[];
+  // NEW: Filters extracted from query
+  filters?: {
+    department?: string;
+    skill?: string;
+    project?: string;
+    position?: string;
+  };
 }
 
 @Injectable()
@@ -19,11 +26,27 @@ export class QueryClassifierService {
     const lower = message.toLowerCase().trim();
 
     // ============ SIMPLE QUERIES ============
-    // List employees
+    // List employees (with filter detection)
     if (
       /danh sách|list|tất cả|all/i.test(lower) &&
       /nhân viên|employee|staff|people/i.test(lower)
     ) {
+      // Check for filters
+      const department = this.extractDepartmentName(message);
+      const skill = this.extractSkillName(message);
+      const project = this.extractProjectName(message);
+
+      // If has filters, upgrade to medium level
+      if (department || skill || project) {
+        return {
+          level: 'medium',
+          type: 'list-employees-filtered',
+          keywords: ['list', 'employees', 'filtered'],
+          filters: { department, skill, project },
+        };
+      }
+
+      // No filters, simple list all
       return {
         level: 'simple',
         type: 'list-employees',
@@ -205,4 +228,79 @@ export class QueryClassifierService {
 
     return cleaned || '';
   }
+
+  /**
+   * Extract department name from query
+   * Examples: "phòng ban Frontend", "department IT", "phòng Frontend"
+   */
+  private extractDepartmentName(message: string): string | undefined {
+    const lower = message.toLowerCase();
+    
+    // Pattern: "phòng ban X" or "phòng X" or "department X"
+    const patterns = [
+      /phòng\s*ban\s+([a-zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\w]+)/i,
+      /phòng\s+([a-zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\w]+)/i,
+      /department\s+([a-z\w]+)/i,
+      /dept\s+([a-z\w]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = lower.match(pattern);
+      if (match && match[1]) {
+        // Capitalize first letter
+        return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extract skill name from query
+   * Examples: "kỹ năng Python", "skill React", "biết AWS"
+   */
+  private extractSkillName(message: string): string | undefined {
+    const lower = message.toLowerCase();
+    
+    // Pattern: "kỹ năng X", "skill X", "biết X", "có X"
+    const patterns = [
+      /kỹ\s*năng\s+([a-z0-9\-\+\.]+)/i,
+      /skill\s+([a-z0-9\-\+\.]+)/i,
+      /biết\s+([a-z0-9\-\+\.]+)/i,
+      /có\s+([a-z0-9\-\+\.]+)(?:\s|$)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = lower.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extract project name from query
+   * Examples: "dự án ERP", "project ABC"
+   */
+  private extractProjectName(message: string): string | undefined {
+    const lower = message.toLowerCase();
+    
+    // Pattern: "dự án X", "project X"
+    const patterns = [
+      /dự\s*án\s+([a-z0-9\-]+)/i,
+      /project\s+([a-z0-9\-]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = lower.match(pattern);
+      if (match && match[1]) {
+        return match[1].toUpperCase();
+      }
+    }
+
+    return undefined;
+  }
+
 }

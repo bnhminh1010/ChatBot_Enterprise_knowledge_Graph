@@ -39,17 +39,20 @@ export class EmployeesService {
     try {
       const rows = await this.neo.run(
         `MATCH (e:NhanSu {empId:$empId})
-         OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]->(e)
+         OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e)
          OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
          OPTIONAL MATCH (e)-[:LAM_DU_AN]->(p:DuAn)
+         WITH e, pb, 
+              collect({name:k.ten, level:r.level}) AS skills,
+              collect(DISTINCT p) AS projects
          RETURN {
            id: e.empId,
            empId: e.empId,
            name: e.ten,
            position: e.chucDanh,
            department: pb.ten,
-           skills: collect({name:k.ten, level:r.level}),
-           projects: collect(DISTINCT {key:p.key, name:p.ten})
+           skills: skills,
+           projects: [proj IN projects | {key: proj.key, name: proj.ten}]
          } AS emp`,
         { empId }
       );
@@ -93,6 +96,129 @@ export class EmployeesService {
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Database connection error';
       this.logger.error('Top skills error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
+    }
+  }
+
+  /**
+   * NEW: Find employees by department (using undirected relationship)
+   */
+  async findByDepartment(deptName: string, skip = 0, limit = 50) {
+    try {
+      const rows = await this.neo.run(
+        `MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e:NhanSu)
+         WHERE toLower(pb.ten) CONTAINS toLower($deptName) OR toLower(pb.code) CONTAINS toLower($deptName)
+         OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
+         WITH e, pb, collect({name:k.ten, level:r.level}) AS skills
+         RETURN {
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           department: pb.ten,
+           skills: skills
+         } AS emp
+         ORDER BY e.ten
+         SKIP $skip LIMIT $limit`,
+        { deptName, skip: neo4j.int(skip), limit: neo4j.int(limit) }
+      );
+      return rows.map(r => r.emp);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Find employees by department error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
+    }
+  }
+
+  /**
+   * NEW: Find employees by skill
+   */
+  async findBySkill(skillName: string, skip = 0, limit = 50) {
+    try {
+      const rows = await this.neo.run(
+        `MATCH (e:NhanSu)-[r:CO_KY_NANG]->(k:KyNang)
+         WHERE toLower(k.ten) CONTAINS toLower($skillName)
+         OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e)
+         WITH e, pb, collect({name:k.ten, level:r.level}) AS skills
+         RETURN {
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           department: COALESCE(pb.ten, 'N/A'),
+           skills: skills
+         } AS emp
+         ORDER BY e.ten
+         SKIP $skip LIMIT $limit`,
+        { skillName, skip: neo4j.int(skip), limit: neo4j.int(limit) }
+      );
+      return rows.map(r => r.emp);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Find employees by skill error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
+    }
+  }
+
+  /**
+   * NEW: Find employees by position
+   */
+  async findByPosition(position: string, skip = 0, limit = 50) {
+    try {
+      const rows = await this.neo.run(
+        `MATCH (e:NhanSu)
+         WHERE toLower(e.chucDanh) CONTAINS toLower($position)
+         OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e)
+         OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
+         WITH e, pb, collect({name:k.ten, level:r.level}) AS skills
+         RETURN {
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           department: COALESCE(pb.ten, 'N/A'),
+           skills: skills
+         } AS emp
+         ORDER BY e.ten
+         SKIP $skip LIMIT $limit`,
+        { position, skip: neo4j.int(skip), limit: neo4j.int(limit) }
+      );
+      return rows.map(r => r.emp);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Find employees by position error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
+    }
+  }
+
+  /**
+   * NEW: Find employees by project
+   */
+  async findByProject(projectKey: string, skip = 0, limit = 50) {
+    try {
+      const rows = await this.neo.run(
+        `MATCH (e:NhanSu)-[:LAM_DU_AN]->(p:DuAn)
+         WHERE toLower(p.key) CONTAINS toLower($projectKey) OR toLower(p.ten) CONTAINS toLower($projectKey)
+         OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e)
+         OPTIONAL MATCH (e)-[r:CO_KY_NANG]->(k:KyNang)
+         WITH e, pb, p, collect({name:k.ten, level:r.level}) AS skills
+         RETURN {
+           id: e.empId,
+           empId: e.empId,
+           name: e.ten,
+           position: e.chucDanh,
+           department: COALESCE(pb.ten, 'N/A'),
+           project: p.ten,
+           skills: skills
+         } AS emp
+         ORDER BY e.ten
+         SKIP $skip LIMIT $limit`,
+        { projectKey, skip: neo4j.int(skip), limit: neo4j.int(limit) }
+      );
+      return rows.map(r => r.emp);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Find employees by project error:', errorMessage);
       throw new ServiceUnavailableException(errorMessage);
     }
   }

@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@nestjs/cache-manager": "^2.2.2",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.1",
@@ -29,6 +30,7 @@
     "@nestjs/swagger": "^11.2.1",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
+    "cache-manager": "^5.7.6",
     "chromadb": "^3.1.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",

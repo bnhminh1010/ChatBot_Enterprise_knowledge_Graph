@@ -54,7 +54,12 @@ let ChatService = ChatService_1 = class ChatService {
                     response = await this.handleSimpleQuery(classified.type, classified.value);
                     break;
                 case 'medium':
-                    response = await this.handleMediumQuery(classified.type, classified.value, message);
+                    if (classified.filters && Object.keys(classified.filters).length > 0) {
+                        response = await this.handleFilteredQuery(classified.type, classified.filters, message);
+                    }
+                    else {
+                        response = await this.handleMediumQuery(classified.type, classified.value, message);
+                    }
                     break;
                 case 'complex':
                     response = await this.handleComplexQuery(classified.type, classified.value, message);
@@ -73,8 +78,17 @@ let ChatService = ChatService_1 = class ChatService {
         catch (error) {
             this.logger.error(`Error processing query: ${error}`);
             const processingTime = Date.now() - startTime;
+            let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            if (errorMessage.includes('Neo4j') || errorMessage.includes('database') || errorMessage.includes('connection')) {
+                errorMessage = `Lỗi kết nối database: ${errorMessage}\n\n` +
+                    `💡 Hướng dẫn khắc phục:\n` +
+                    `1. Kiểm tra Neo4j có đang chạy: docker ps | grep neo4j\n` +
+                    `2. Khởi động Neo4j: cd ekg-backend && docker-compose up -d\n` +
+                    `3. Kiểm tra file .env có đầy đủ: NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD\n` +
+                    `4. Truy cập Neo4j Browser: http://localhost:7474 để kiểm tra`;
+            }
             return {
-                response: `Có lỗi xảy ra: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                response: `Có lỗi xảy ra: ${errorMessage}`,
                 queryType: 'error',
                 queryLevel: 'simple',
                 processingTime,
@@ -180,6 +194,54 @@ let ChatService = ChatService_1 = class ChatService {
             throw error;
         }
     }
+    async handleFilteredQuery(type, filters, originalMessage) {
+        this.logger.debug(`Handling filtered query: ${type}, filters: ${JSON.stringify(filters)}`);
+        try {
+            if (type === 'list-employees-filtered') {
+                let employees = [];
+                let filterContext = '';
+                if (filters.department) {
+                    try {
+                        const dept = await this.departmentsService.findByName(filters.department);
+                        employees = await this.employeesService.findByDepartment(dept.code);
+                        filterContext = `Phòng ban: ${dept.name}`;
+                    }
+                    catch (error) {
+                        return `Không tìm thấy phòng ban "${filters.department}". Hãy thử lại với tên chính xác.`;
+                    }
+                }
+                else if (filters.skill) {
+                    employees = await this.employeesService.findBySkill(filters.skill);
+                    filterContext = `Kỹ năng: ${filters.skill}`;
+                }
+                else if (filters.project) {
+                    employees = await this.employeesService.findByProject(filters.project);
+                    filterContext = `Dự án: ${filters.project}`;
+                }
+                else if (filters.position) {
+                    employees = await this.employeesService.findByPosition(filters.position);
+                    filterContext = `Chức danh: ${filters.position}`;
+                }
+                if (!employees || employees.length === 0) {
+                    return `Không tìm thấy nhân viên nào với điều kiện: ${filterContext}`;
+                }
+                const list = employees
+                    .slice(0, 10)
+                    .map((e, idx) => {
+                    const skills = e.skills?.filter((s) => s.name).map((s) => s.name).join(', ') || 'N/A';
+                    return `${idx + 1}. ${e.name} (${e.position || 'N/A'}) - Skills: ${skills}`;
+                })
+                    .join('\n');
+                const moreInfo = employees.length > 10 ? `\n... và ${employees.length - 10} nhân viên khác` : '';
+                return `📋 Danh sách nhân viên - ${filterContext} (${employees.length}):\n${list}${moreInfo}`;
+            }
+            return `Xin lỗi, tôi chưa hỗ trợ filter cho query type: ${type}`;
+        }
+        catch (error) {
+            this.logger.error(`Error in handleFilteredQuery: ${error}`);
+            return `Có lỗi xảy ra khi xử lý filtered query: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+    }
     async handleMediumQuery(type, value, message) {
         try {
             switch (type) {
@@ -238,17 +300,18 @@ let ChatService = ChatService_1 = class ChatService {
     }
     async handleComplexQuery(type, value, message) {
         try {
-            const employees = await this.employeesService.list();
-            const departments = await this.departmentsService.list();
-            const projects = await this.projectsService.list();
-            const context = `Bạn là một trợ lý thông minh cho hệ thống quản lý nhân sự và dự án (EKG).
-
-Dữ liệu hiện tại:
-- Số nhân viên: ${employees.length}
-- Số phòng ban: ${departments.length}
-- Số dự án: ${projects.length}
-
-Hãy trả lời bằng tiếng Việt và cung cấp thông tin hữu ích dựa trên dữ liệu hệ thống.`;
+            let context = `Bạn là một trợ lý thông minh cho hệ thống quản lý nhân sự và dự án (EKG).\n\n`;
+            try {
+                const employees = await this.employeesService.list();
+                const departments = await this.departmentsService.list();
+                const projects = await this.projectsService.list();
+                context += `Dữ liệu hiện tại:\n- Số nhân viên: ${employees.length}\n- Số phòng ban: ${departments.length}\n- Số dự án: ${projects.length}\n\n`;
+            }
+            catch (dbError) {
+                this.logger.warn(`Could not fetch database context for complex query: ${dbError}`);
+                context += `Lưu ý: Không thể truy cập dữ liệu database hiện tại.\n\n`;
+            }
+            context += `Hãy trả lời bằng tiếng Việt và cung cấp thông tin hữu ích dựa trên dữ liệu hệ thống.`;
             const response = await this.geminiService.generateResponse(message, context);
             return response;
         }

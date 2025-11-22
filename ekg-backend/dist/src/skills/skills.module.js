@@ -18,7 +18,8 @@ exports.SkillsModule = SkillsModule = __decorate([
     (0, common_1.Module)({
         imports: [neo4j_module_1.Neo4jModule],
         providers: [skills_service_1.SkillsService],
-        controllers: [skills_controller_1.SkillsController]
+        controllers: [skills_controller_1.SkillsController],
+        exports: [skills_service_1.SkillsService],
     })
 ], SkillsModule);
 //# sourceMappingURL=skills.module.js.map

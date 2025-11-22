@@ -18,7 +18,8 @@ exports.DepartmentsModule = DepartmentsModule = __decorate([
     (0, common_1.Module)({
         imports: [neo4j_module_1.Neo4jModule],
         providers: [departments_service_1.DepartmentsService],
-        controllers: [departments_controller_1.DepartmentsController]
+        controllers: [departments_controller_1.DepartmentsController],
+        exports: [departments_service_1.DepartmentsService],
     })
 ], DepartmentsModule);
 //# sourceMappingURL=departments.module.js.map

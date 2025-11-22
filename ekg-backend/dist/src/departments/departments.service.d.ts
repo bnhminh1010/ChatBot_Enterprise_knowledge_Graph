@@ -4,6 +4,7 @@ export declare class DepartmentsService {
     constructor(neo: Neo4jService);
     list(): Promise<any[]>;
     get(code: string): Promise<any>;
+    findByName(name: string): Promise<any>;
     create(dto: {
         code: string;
         ten: string;

@@ -52,7 +52,12 @@ export class ChatService {
           break;
 
         case 'medium':
-          response = await this.handleMediumQuery(classified.type, classified.value, message);
+          // NEW: Check if this is a filtered query
+          if (classified.filters && Object.keys(classified.filters).length > 0) {
+            response = await this.handleFilteredQuery(classified.type, classified.filters, message);
+          } else {
+            response = await this.handleMediumQuery(classified.type, classified.value, message);
+          }
           break;
 
         case 'complex':
@@ -207,6 +212,75 @@ export class ChatService {
     } catch (error) {
       this.logger.error(`Error handling simple query: ${error}`);
       throw error;
+    }
+  }
+
+  /**
+   * NEW: Handle filtered queries
+   * Examples: "Nhân viên phòng Frontend", "Nhân viên có kỹ năng Python"
+   */
+  private async handleFilteredQuery(
+    type: string,
+    filters: { department?: string; skill?: string; project?: string; position?: string },
+    originalMessage: string,
+  ): Promise<string> {
+    this.logger.debug(`Handling filtered query: ${type}, filters: ${JSON.stringify(filters)}`);
+
+    try {
+      // Handle list-employees-filtered
+      if (type === 'list-employees-filtered') {
+        let employees: any[] = [];
+        let filterContext = '';
+
+        // Filter by department
+        if (filters.department) {
+          try {
+            const dept = await this.departmentsService.findByName(filters.department);
+            employees = await this.employeesService.findByDepartment(dept.code);
+            filterContext = `Phòng ban: ${dept.name}`;
+          } catch (error) {
+            return `Không tìm thấy phòng ban "${filters.department}". Hãy thử lại với tên chính xác.`;
+          }
+        }
+        // Filter by skill
+        else if (filters.skill) {
+          employees = await this.employeesService.findBySkill(filters.skill);
+          filterContext = `Kỹ năng: ${filters.skill}`;
+        }
+        // Filter by project
+        else if (filters.project) {
+          employees = await this.employeesService.findByProject(filters.project);
+          filterContext = `Dự án: ${filters.project}`;
+        }
+        // Filter by position
+        else if (filters.position) {
+          employees = await this.employeesService.findByPosition(filters.position);
+          filterContext = `Chức danh: ${filters.position}`;
+        }
+
+        // Format response
+        if (!employees || employees.length === 0) {
+          return `Không tìm thấy nhân viên nào với điều kiện: ${filterContext}`;
+        }
+
+        const list = employees
+          .slice(0, 10)
+          .map((e, idx) => {
+            const skills = e.skills?.filter((s: any) => s.name).map((s: any) => s.name).join(', ') || 'N/A';
+            return `${idx + 1}. ${e.name} (${e.position || 'N/A'}) - Skills: ${skills}`;
+          })
+          .join('\n');
+
+        const moreInfo = employees.length > 10 ? `\n... và ${employees.length - 10} nhân viên khác` : '';
+        
+        return `📋 Danh sách nhân viên - ${filterContext} (${employees.length}):\n${list}${moreInfo}`;
+      }
+
+      // Fallback for unknown filtered types
+      return `Xin lỗi, tôi chưa hỗ trợ filter cho query type: ${type}`;
+    } catch (error) {
+      this.logger.error(`Error in handleFilteredQuery: ${error}`);
+      return `Có lỗi xảy ra khi xử lý filtered query: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
 

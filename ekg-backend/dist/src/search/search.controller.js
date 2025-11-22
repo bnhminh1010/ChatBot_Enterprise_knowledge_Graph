@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var SearchController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SearchController = void 0;
 const common_1 = require("@nestjs/common");
@@ -21,8 +22,9 @@ const swagger_1 = require("@nestjs/swagger");
 const neo4j_service_1 = require("../core/neo4j/neo4j.service");
 const neo4j_driver_1 = __importDefault(require("neo4j-driver"));
 const search_query_dto_1 = require("./dto/search-query.dto");
-let SearchController = class SearchController {
+let SearchController = SearchController_1 = class SearchController {
     neo;
+    logger = new common_1.Logger(SearchController_1.name);
     constructor(neo) {
         this.neo = neo;
     }
@@ -54,8 +56,10 @@ let SearchController = class SearchController {
                 : Number(rawTotal);
             return { page, limit, total, items };
         }
-        catch {
-            throw new common_1.ServiceUnavailableException('Database connection error');
+        catch (error) {
+            const errorMessage = error?.message || 'Database connection error';
+            this.logger.error('Search error:', errorMessage);
+            throw new common_1.ServiceUnavailableException(errorMessage);
         }
     }
 };
@@ -68,7 +72,7 @@ __decorate([
     __metadata("design:paramtypes", [search_query_dto_1.SearchQueryDto]),
     __metadata("design:returntype", Promise)
 ], SearchController.prototype, "search", null);
-exports.SearchController = SearchController = __decorate([
+exports.SearchController = SearchController = SearchController_1 = __decorate([
     (0, swagger_1.ApiTags)('Search'),
     (0, common_1.Controller)('search'),
     __metadata("design:paramtypes", [neo4j_service_1.Neo4jService])

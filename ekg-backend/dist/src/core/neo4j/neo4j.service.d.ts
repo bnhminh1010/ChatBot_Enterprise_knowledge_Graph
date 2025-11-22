@@ -5,6 +5,7 @@ export declare class Neo4jService implements OnModuleDestroy {
     private readonly logger;
     private ensureDriver;
     getSession(database?: string): Session;
+    verifyConnection(): Promise<boolean>;
     run<T = any>(cypher: string, params?: Record<string, any>): Promise<T[]>;
     onModuleDestroy(): Promise<void>;
 }

@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const cache_manager_1 = require("@nestjs/cache-manager");
 const neo4j_module_1 = require("./core/neo4j/neo4j.module");
 const employees_module_1 = require("./employees/employees.module");
 const projects_module_1 = require("./projects/projects.module");
@@ -22,6 +23,11 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            cache_manager_1.CacheModule.register({
+                isGlobal: true,
+                ttl: 600,
+                max: 100,
+            }),
             neo4j_module_1.Neo4jModule,
             employees_module_1.EmployeesModule,
             projects_module_1.ProjectsModule,
