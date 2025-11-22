@@ -1,12 +1,16 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { SkillsService } from './skills.service';
 import { AddSkillToEmployeeDto } from './dto/add-skill-to-employee.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Skills')
 @Controller('skills')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SkillsController {
-  constructor(private svc: SkillsService) {}
+  constructor(private svc: SkillsService) { }
 
   @ApiOperation({ summary: 'Top kỹ năng theo tần suất xuất hiện' })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
@@ -15,7 +19,9 @@ export class SkillsController {
   }
 
   @ApiOperation({ summary: 'Gán kỹ năng cho nhân sự' })
-  @Post('add-to-employee') add(@Body() dto: AddSkillToEmployeeDto) {
+  @Post('add-to-employee')
+  @Roles('ADMIN')
+  add(@Body() dto: AddSkillToEmployeeDto) {
     return this.svc.addToEmployee(dto);
   }
 

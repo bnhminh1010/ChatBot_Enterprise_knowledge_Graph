@@ -1,14 +1,18 @@
 // src/employees/employees.controller.ts
 import {
   Controller, Get, Param, Post, Body, Query,
-  DefaultValuePipe, ParseIntPipe
+  DefaultValuePipe, ParseIntPipe, UseGuards
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('employees')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployeesController {
-  constructor(private svc: EmployeesService) {}
+  constructor(private svc: EmployeesService) { }
 
   // GET /employees?skip=&limit=
   @Get()
@@ -33,6 +37,7 @@ export class EmployeesController {
   }
 
   @Post()
+  @Roles('ADMIN')
   create(@Body() dto: CreateEmployeeDto) {
     return this.svc.create(dto);
   }

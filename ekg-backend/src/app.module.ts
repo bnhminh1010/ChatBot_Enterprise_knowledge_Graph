@@ -8,6 +8,8 @@ import { SkillsModule } from './skills/skills.module';
 import { SearchController } from './search/search.controller';
 import { ChatModule } from './chat/chat.module';
 import { AiModule } from './ai/ai.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { AiModule } from './ai/ai.module';
       max: 100, // Maximum number of items in cache
     }),
     Neo4jModule,
+    AuthModule,
+    UsersModule,
     EmployeesModule,
     ProjectsModule,
     DepartmentsModule,
@@ -28,4 +32,4 @@ import { AiModule } from './ai/ai.module';
   controllers: [SearchController],
   providers: [],
 })
-export class AppModule {}
+export class AppModule { }
