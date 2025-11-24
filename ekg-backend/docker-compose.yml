@@ -1,0 +1,69 @@
+
+services:
+  # Neo4j - Enterprise Knowledge Graph Database
+  neo4j:
+    image: neo4j:5.23
+    container_name: ekg-neo4j
+    ports:
+      - "7474:7474"  # Neo4j Browser (UI)
+      - "7687:7687"  # Bolt (driver connection)
+    environment:
+      NEO4J_AUTH: neo4j/neo4j123
+      NEO4JLABS_APOC: "true"
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+    volumes:
+      - ./neo4j/data:/data
+      - ./neo4j/import:/var/lib/neo4j/import
+    restart: unless-stopped
+    networks:
+      - ekg-network
+
+  # Redis - Conversation History Storage
+  redis:
+    image: redis:7-alpine
+    container_name: ekg-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - ekg-network
+
+  # Ollama - Local LLM for RAG queries
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ekg-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - ekg-network
+    environment:
+      - OLLAMA_MODELS=/root/.ollama/models
+    # Auto-pull qwen2.5:7b model on startup
+    command: >
+      sh -c "ollama serve & 
+             sleep 10 && 
+             ollama pull qwen2.5:7b && 
+             wait"
+
+networks:
+  ekg-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
+  ollama-data:
+    driver: local

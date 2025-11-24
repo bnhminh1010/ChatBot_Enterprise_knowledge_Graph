@@ -1,0 +1,179 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { EmployeesService } from '../employees/employees.service';
+import { DepartmentsService } from '../departments/departments.service';
+import { ProjectsService } from '../projects/projects.service';
+import { SkillsService } from '../skills/skills.service';
+import { CompaniesService } from '../companies/companies.service';
+import { PositionsService } from '../positions/positions.service';
+import { TechnologiesService } from '../technologies/technologies.service';
+import { LocationsService } from '../locations/locations.service';
+import { UnitsService } from '../units/units.service';
+
+/**
+ * Function Calling Service
+ * Handles function calls from Gemini AI to access Neo4j data
+ */
+@Injectable()
+export class FunctionCallingService {
+  private readonly logger = new Logger(FunctionCallingService.name);
+
+  constructor(
+    private employeesService: EmployeesService,
+    private departmentsService: DepartmentsService,
+    private projectsService: ProjectsService,
+    private skillsService: SkillsService,
+    // NEW: Entity search services
+    private companiesService: CompaniesService,
+    private positionsService: PositionsService,
+    private technologiesService: TechnologiesService,
+    private locationsService: LocationsService,
+    private unitsService: UnitsService,
+  ) {}
+
+  /**
+   * Execute a function call from Gemini
+   */
+  async executeFunctionCall(functionName: string, args: any): Promise<any> {
+    this.logger.debug(`Executing function: ${functionName} with args:`, args);
+
+    try {
+      switch (functionName) {
+        case 'search_employees':
+          return await this.searchEmployees(args);
+
+        case 'get_employee_details':
+          return await this.getEmployeeDetails(args);
+
+        case 'list_departments':
+          return await this.listDepartments(args);
+
+        case 'list_projects':
+          return await this.listProjects(args);
+
+        case 'list_skills':
+          return await this.listSkills(args);
+
+        case 'aggregate_stats':
+          return await this.getAggregateStats();
+
+        case 'find_employees_by_skill':
+          return await this.findEmployeesBySkill(args);
+
+        case 'find_employees_by_department':
+          return await this.findEmployeesByDepartment(args);
+
+        // NEW: Entity search tools
+        case 'find_company':
+          return await this.findCompany(args);
+
+        case 'find_position':
+          return await this.findPosition(args);
+
+        case 'find_technology':
+          return await this.findTechnology(args);
+
+        case 'find_location':
+          return await this.findLocation(args);
+
+        case 'find_unit':
+          return await this.findUnit(args);
+
+        default:
+          throw new Error(`Unknown function: ${functionName}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error executing function ${functionName}:`, error);
+      throw error;
+      {
+        name: 'search_employees',
+        description: 'Tìm kiếm nhân viên theo các tiêu chí như phòng ban, kỹ năng, chức danh, hoặc dự án. Trả về danh sách nhân viên phù hợp.',
+        parameters: {
+          type: 'object',
+          properties: {
+            department: {
+              type: 'string',
+              description: 'Tên phòng ban (ví dụ: "Backend", "Frontend", "Marketing")',
+            },
+            skill: {
+              type: 'string',
+              description: 'Tên kỹ năng (ví dụ: "Python", "React", "Java")',
+            },
+            position: {
+              type: 'string',
+              description: 'Chức danh (ví dụ: "Senior Developer", "Manager")',
+            },
+            project: {
+              type: 'string',
+              description: 'Tên hoặc mã dự án',
+            },
+            limit: {
+              type: 'number',
+              description: 'Số lượng kết quả tối đa (mặc định 10)',
+            },
+          },
+        },
+      },
+      {
+        name: 'get_employee_details',
+        description: 'Lấy thông tin chi tiết của một nhân viên cụ thể theo mã nhân viên',
+        parameters: {
+          type: 'object',
+          properties: {
+            empId: {
+              type: 'string',
+              description: 'Mã nhân viên (ví dụ: "NV001")',
+            },
+          },
+          required: ['empId'],
+        },
+      },
+      {
+        name: 'list_departments',
+        description: 'Liệt kê tất cả phòng ban trong hệ thống',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Số lượng kết quả tối đa',
+            },
+          },
+        },
+      },
+      {
+        name: 'list_projects',
+        description: 'Liệt kê tất cả dự án trong hệ thống',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Số lượng kết quả tối đa',
+            },
+          },
+        },
+      },
+      {
+        name: 'list_skills',
+        description: 'Liệt kê tất cả kỹ năng trong hệ thống',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Số lượng kết quả tối đa',
+            },
+          },
+        },
+      },
+      {
+        name: 'aggregate_stats',
+        description: 'Lấy thống kê tổng hợp về hệ thống (tổng số nhân viên, phòng ban, dự án, kỹ năng)',
+        parameters: {
+          type: 'object',
+          properties: {},
+        },
+      },
+    ];
+  }
+}
