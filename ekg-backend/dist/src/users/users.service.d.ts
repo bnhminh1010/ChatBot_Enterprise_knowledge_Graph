@@ -5,6 +5,7 @@ export interface User {
     hoTen: string;
     trangThai: string;
     password?: string;
+    salt?: string;
     role?: string;
 }
 export declare class UsersService {
@@ -12,6 +13,9 @@ export declare class UsersService {
     constructor(neo4j: Neo4jService);
     findByEmail(email: string): Promise<User | null>;
     findByUsername(username: string): Promise<User | null>;
-    validatePassword(plainPassword: string, hashedPassword: string | undefined): Promise<boolean>;
-    hashPassword(password: string): Promise<string>;
+    validatePassword(plainPassword: string, hashedPassword: string | undefined, salt: string | undefined): Promise<boolean>;
+    hashPassword(password: string): Promise<{
+        hash: string;
+        salt: string;
+    }>;
 }

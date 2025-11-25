@@ -73,7 +73,7 @@ let ChromaDBService = ChromaDBService_1 = class ChromaDBService {
         }
     }
     async initializeCollections() {
-        const collectionNames = ['employees', 'skills', 'departments', 'projects'];
+        const collectionNames = ['employees', 'skills', 'departments', 'projects', 'positions', 'technologies'];
         for (const name of collectionNames) {
             const filePath = path.join(this.chromadbPath, `${name}.json`);
             this.collectionFiles.set(name, filePath);

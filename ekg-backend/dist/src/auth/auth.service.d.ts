@@ -11,6 +11,7 @@ export declare class AuthService {
         username?: string;
         hoTen: string;
         trangThai: string;
+        salt?: string;
         role?: string;
     } | null>;
     login(email: string, password: string): Promise<{

@@ -10,6 +10,9 @@ import { SearchService } from '../search/search.service';
 import { ConversationHistoryService } from './services/conversation-history.service';
 import { RedisConversationService } from './services/redis-conversation.service';
 import { OllamaRAGService } from './services/ollama-rag.service';
+import { GeminiToolsService } from '../ai/gemini-tools.service';
+import { PositionsService } from '../positions/positions.service';
+import { TechnologiesService } from '../technologies/technologies.service';
 export declare class ChatService {
     private queryClassifier;
     private ollamaService;
@@ -23,8 +26,11 @@ export declare class ChatService {
     private conversationHistoryService;
     private redisConversationService;
     private ollamaRAGService;
+    private geminiToolsService;
+    private positionsService;
+    private technologiesService;
     private readonly logger;
-    constructor(queryClassifier: QueryClassifierService, ollamaService: OllamaService, chromaDBService: ChromaDBService, geminiService: GeminiService, employeesService: EmployeesService, skillsService: SkillsService, departmentsService: DepartmentsService, projectsService: ProjectsService, searchService: SearchService, conversationHistoryService: ConversationHistoryService, redisConversationService: RedisConversationService, ollamaRAGService: OllamaRAGService);
+    constructor(queryClassifier: QueryClassifierService, ollamaService: OllamaService, chromaDBService: ChromaDBService, geminiService: GeminiService, employeesService: EmployeesService, skillsService: SkillsService, departmentsService: DepartmentsService, projectsService: ProjectsService, searchService: SearchService, conversationHistoryService: ConversationHistoryService, redisConversationService: RedisConversationService, ollamaRAGService: OllamaRAGService, geminiToolsService: GeminiToolsService, positionsService: PositionsService, technologiesService: TechnologiesService);
     processQuery(message: string, conversationId?: string, userId?: string): Promise<{
         response: string;
         queryType: string;

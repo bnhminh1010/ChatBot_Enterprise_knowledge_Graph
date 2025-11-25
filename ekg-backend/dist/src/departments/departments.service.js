@@ -27,7 +27,7 @@ let DepartmentsService = class DepartmentsService {
            description: COALESCE(p.description, '')
          } AS dept
          ORDER BY p.ten`);
-            return rows.map(r => r.dept);
+            return rows.map((r) => r.dept);
         }
         catch (e) {
             throw new common_1.ServiceUnavailableException('Database connection error');
@@ -102,12 +102,100 @@ let DepartmentsService = class DepartmentsService {
             const res = await this.neo.run(`MATCH (p:PhongBan {code:$code}) RETURN p LIMIT 1`, { code });
             if (!res[0])
                 throw new common_1.NotFoundException('Department not found');
-            await this.neo.run(`MATCH (p:PhongBan {code:$code}) DETACH DELETE p`, { code });
+            await this.neo.run(`MATCH (p:PhongBan {code:$code}) DETACH DELETE p`, {
+                code,
+            });
             return { ok: true };
         }
         catch (e) {
             if (e instanceof common_1.NotFoundException)
                 throw e;
+            throw new common_1.ServiceUnavailableException('Database connection error');
+        }
+    }
+    async searchByCode(code) {
+        try {
+            const rows = await this.neo.run(`MATCH (p:PhongBan)
+         WHERE toLower(p.ma) CONTAINS toLower($code)
+         RETURN {
+           id: p.id,
+           code: p.ma,
+           name: p.ten,
+           headcount: p.so_nhan_su_du_kien,
+           email: p.email_lien_he
+         } AS dept
+         ORDER BY p.ten`, { code });
+            return rows.map((r) => r.dept);
+        }
+        catch (e) {
+            throw new common_1.ServiceUnavailableException('Database connection error');
+        }
+    }
+    async searchByHeadcount(headcount) {
+        try {
+            const rows = await this.neo.run(`MATCH (p:PhongBan)
+         WHERE p.so_nhan_su_du_kien = $headcount
+         RETURN {
+           id: p.id,
+           code: p.ma,
+           name: p.ten,
+           headcount: p.so_nhan_su_du_kien,
+           email: p.email_lien_he
+         } AS dept
+         ORDER BY p.ten`, { headcount });
+            return rows.map((r) => r.dept);
+        }
+        catch (e) {
+            throw new common_1.ServiceUnavailableException('Database connection error');
+        }
+    }
+    async searchByEmail(email) {
+        try {
+            const rows = await this.neo.run(`MATCH (p:PhongBan)
+         WHERE toLower(p.email_lien_he) CONTAINS toLower($email)
+         RETURN {
+           id: p.id,
+           code: p.ma,
+           name: p.ten,
+           headcount: p.so_nhan_su_du_kien,
+           email: p.email_lien_he
+         } AS dept
+         ORDER BY p.ten`, { email });
+            return rows.map((r) => r.dept);
+        }
+        catch (e) {
+            throw new common_1.ServiceUnavailableException('Database connection error');
+        }
+    }
+    async getById(id) {
+        try {
+            const rows = await this.neo.run(`MATCH (p:PhongBan {id: $id})
+         OPTIONAL MATCH (p)-[:CO_NHAN_SU]->(e:NhanSu)
+         RETURN {
+           id: p.id,
+           code: p.ma,
+           name: p.ten,
+           headcount: p.so_nhan_su_du_kien,
+           email: p.email_lien_he,
+           employees: collect(DISTINCT {id: e.id, name: e.ho_ten})
+         } AS dept`, { id });
+            if (!rows[0])
+                throw new common_1.NotFoundException('Department not found');
+            return rows[0].dept;
+        }
+        catch (e) {
+            if (e instanceof common_1.NotFoundException)
+                throw e;
+            throw new common_1.ServiceUnavailableException('Database connection error');
+        }
+    }
+    async count() {
+        try {
+            const rows = await this.neo.run(`MATCH (p:PhongBan)
+         RETURN count(p) AS total`);
+            return rows[0]?.total?.toNumber() || 0;
+        }
+        catch (e) {
             throw new common_1.ServiceUnavailableException('Database connection error');
         }
     }

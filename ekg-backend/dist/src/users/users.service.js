@@ -45,7 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
 const neo4j_service_1 = require("../core/neo4j/neo4j.service");
-const bcrypt = __importStar(require("bcrypt"));
+const crypto = __importStar(require("crypto"));
 let UsersService = class UsersService {
     neo4j;
     constructor(neo4j) {
@@ -58,7 +58,8 @@ let UsersService = class UsersService {
              u.username AS username,
              u.ho_ten AS hoTen, 
              u.trang_thai AS trangThai,
-             u.mat_khau AS password,
+             u.mat_khau_hash AS password,
+             u.mat_khau_salt AS salt,
              r.ma AS role
     `;
         const result = await this.neo4j.run(cypher, { email });
@@ -72,6 +73,7 @@ let UsersService = class UsersService {
             hoTen: record.hoTen,
             trangThai: record.trangThai,
             password: record.password,
+            salt: record.salt,
             role: record.role,
         };
     }
@@ -81,7 +83,8 @@ let UsersService = class UsersService {
       RETURN u.username AS username, 
              u.ho_ten AS hoTen, 
              u.trang_thai AS trangThai,
-             u.mat_khau AS password,
+             u.mat_khau_hash AS password,
+             u.mat_khau_salt AS salt,
              r.ma AS role
     `;
         const result = await this.neo4j.run(cypher, { username });
@@ -95,18 +98,27 @@ let UsersService = class UsersService {
             hoTen: record.hoTen,
             trangThai: record.trangThai,
             password: record.password,
+            salt: record.salt,
             role: record.role,
         };
     }
-    async validatePassword(plainPassword, hashedPassword) {
+    async validatePassword(plainPassword, hashedPassword, salt) {
         if (!hashedPassword) {
             return false;
         }
-        return bcrypt.compare(plainPassword, hashedPassword);
+        const hash = crypto
+            .createHash('sha256')
+            .update(plainPassword + 'APTXX_SALT')
+            .digest('hex');
+        return hash === hashedPassword;
     }
     async hashPassword(password) {
-        const saltRounds = 10;
-        return bcrypt.hash(password, saltRounds);
+        const salt = 'APTXX_SALT';
+        const hash = crypto
+            .createHash('sha256')
+            .update(password + 'APTXX_SALT')
+            .digest('hex');
+        return { hash, salt };
     }
 };
 exports.UsersService = UsersService;

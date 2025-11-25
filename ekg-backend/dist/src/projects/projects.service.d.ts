@@ -7,8 +7,17 @@ export declare class ProjectsService {
     create(dto: {
         key: string;
         ten: string;
-        trangThai?: string;
+        trang_thai?: string;
     }): Promise<{
         ok: boolean;
     }>;
+    searchByClient(client: string): Promise<any[]>;
+    searchByField(field: string): Promise<any[]>;
+    searchByType(type: string): Promise<any[]>;
+    searchByCode(code: string): Promise<any[]>;
+    searchByStartDate(startDate: string): Promise<any[]>;
+    searchByStatus(status: string): Promise<any[]>;
+    getById(id: string): Promise<any>;
+    count(): Promise<number>;
+    getProjectManager(projectName: string): Promise<any>;
 }

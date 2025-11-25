@@ -6,15 +6,20 @@ export interface ChatMessage {
   queryType: string;
   queryLevel: 'simple' | 'medium' | 'complex';
   processingTime: number;
+  conversationId?: string;
   timestamp: Date;
 }
 
 /**
  * Gửi message tới AI chat endpoint
  */
-export async function sendChatMessage(message: string): Promise<ChatMessage> {
+export async function sendChatMessage(
+  message: string,
+  conversationId?: string
+): Promise<ChatMessage> {
   const response = await apiPost<ChatMessage>('/chat', {
     message,
+    conversationId,
   });
 
   return response;

@@ -15,5 +15,10 @@ export declare class GeminiService {
     streamResponse(prompt: string, context?: string): Promise<any>;
     extractInfo(text: string, schema: string): Promise<Record<string, any>>;
     classify(text: string, categories: string[]): Promise<string>;
+    generateResponseWithTools(prompt: string, tools: any[], context?: string, history?: Array<{
+        role: 'user' | 'assistant' | 'function';
+        content: string;
+    }>): Promise<any>;
+    continueChatWithToolResults(chatSession: any, toolResults: any[]): Promise<any>;
     summarize(text: string, maxLength?: number): Promise<string>;
 }

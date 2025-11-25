@@ -238,6 +238,68 @@ Return only the category name.`;
             throw error;
         }
     }
+    async generateResponseWithTools(prompt, tools, context, history = []) {
+        try {
+            const toolsConfig = [
+                {
+                    functionDeclarations: tools,
+                },
+            ];
+            const chat = this.model.startChat({
+                tools: toolsConfig,
+                history: history.map((msg) => ({
+                    role: msg.role === 'assistant' ? 'model' : msg.role,
+                    parts: [{ text: msg.content }],
+                })),
+            });
+            const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
+            const result = await chat.sendMessage(fullPrompt);
+            const response = result.response;
+            const functionCalls = response.functionCalls();
+            if (functionCalls && functionCalls.length > 0) {
+                return {
+                    type: 'function_call',
+                    functionCalls: functionCalls,
+                    chatSession: chat,
+                };
+            }
+            return {
+                type: 'text',
+                content: response.text(),
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to generate response with tools: ${error.message}`);
+            throw error;
+        }
+    }
+    async continueChatWithToolResults(chatSession, toolResults) {
+        try {
+            const result = await chatSession.sendMessage(toolResults.map((r) => ({
+                functionResponse: {
+                    name: r.name,
+                    response: r.result,
+                },
+            })));
+            const response = result.response;
+            const functionCalls = response.functionCalls();
+            if (functionCalls && functionCalls.length > 0) {
+                return {
+                    type: 'function_call',
+                    functionCalls: functionCalls,
+                    chatSession: chatSession,
+                };
+            }
+            return {
+                type: 'text',
+                content: response.text(),
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to continue chat with tool results: ${error.message}`);
+            throw error;
+        }
+    }
     async summarize(text, maxLength = 100) {
         try {
             const prompt = `Summarize the following text in maximum ${maxLength} characters:

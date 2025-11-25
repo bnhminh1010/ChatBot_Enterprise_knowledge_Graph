@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ChatController } from './chat.controller';
+import { ConversationsController } from './controllers/conversations.controller';
 import { ChatService } from './chat.service';
 import { CacheService } from './services/cache.service';
 import { MetricsService } from './services/metrics.service';
@@ -28,7 +29,7 @@ import { TechnologiesModule } from '../technologies/technologies.module';
     PositionsModule,
     TechnologiesModule,
   ],
-  controllers: [ChatController],
+  controllers: [ChatController, ConversationsController],
   providers: [
     ChatService,
     CacheService,

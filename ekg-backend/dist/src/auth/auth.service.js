@@ -38,7 +38,7 @@ let AuthService = class AuthService {
         if (user.trangThai !== 'Active') {
             throw new common_1.UnauthorizedException('Tài khoản đã bị khóa');
         }
-        const isPasswordValid = await this.usersService.validatePassword(password, user.password);
+        const isPasswordValid = await this.usersService.validatePassword(password, user.password, user.salt);
         if (!isPasswordValid) {
             return null;
         }

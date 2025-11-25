@@ -3,7 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Network } from 'lucide-react';
+import { GraphView } from '@/components/graph/GraphView';
+import { shouldShowGraph, createSampleGraphData, parseGraphFromResponse } from '@/lib/graph-parser';
 
 interface MessageContentProps {
   content: string;
@@ -12,6 +14,7 @@ interface MessageContentProps {
 
 export function MessageContent({ content, role }: MessageContentProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [showGraph, setShowGraph] = useState(false);
 
   const handleCopy = (code: string, index: number) => {
     navigator.clipboard.writeText(code);
@@ -19,14 +22,18 @@ export function MessageContent({ content, role }: MessageContentProps) {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
+  // Check if we should show graph visualization
+  const shouldDisplayGraph = role === 'assistant' && shouldShowGraph(content);
+  const graphData = shouldDisplayGraph ? (parseGraphFromResponse(content) || createSampleGraphData()) : null;
+
   return (
     <div className={`markdown-content ${role === 'user' ? 'text-white' : 'text-foreground'}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           code({ node, inline, className, children, ...props }: any) {
-            const match = /language-(\w+)/.exec(className || '');
-            const codeString = String(children).replace(/\n$/, '');
+            const match = /language-(\\w+)/.exec(className || '');
+            const codeString = String(children).replace(/\\n$/, '');
             
             // Generate a somewhat unique index for the copy button state based on content length
             // In a real app, you might want a more robust way to track this
@@ -123,6 +130,32 @@ export function MessageContent({ content, role }: MessageContentProps) {
       >
         {content}
       </ReactMarkdown>
+
+      {/* Graph Visualization */}
+      {graphData && (
+        <div className="mt-4">
+          <button
+            onClick={() => setShowGraph(!showGraph)}
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors mb-2"
+          >
+            <Network className="w-4 h-4" />
+            <span>{showGraph ? 'Ẩn' : 'Hiển thị'} Knowledge Graph</span>
+          </button>
+          
+          {showGraph && (
+            <div className="relative">
+              <GraphView
+                data={graphData}
+                width={700}
+                height={500}
+                onNodeClick={(node) => {
+                  console.log('Clicked node:', node);
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

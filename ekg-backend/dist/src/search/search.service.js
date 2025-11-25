@@ -27,17 +27,17 @@ let SearchService = class SearchService {
         const limit = params.limit ?? 20;
         const skip = (page - 1) * limit;
         const unionBlock = `CALL {
-      MATCH (e:NhanSu) WHERE toLower(e.ten) CONTAINS toLower($q)
-      RETURN 'Employee' AS type, e.empId AS id, e.ten AS name, e.chucDanh AS position
+      MATCH (e:NhanSu) WHERE toLower(e.ho_ten) CONTAINS toLower($q)
+      RETURN 'Employee' AS type, e.id AS id, e.ho_ten AS name, e.chucDanh AS extra
       UNION
       MATCH (k:KyNang) WHERE toLower(k.ten) CONTAINS toLower($q)
-      RETURN 'Skill' AS type, k.ten AS id, k.ten AS name, k.category AS category
+      RETURN 'Skill' AS type, k.ten AS id, k.ten AS name, COALESCE(k.category, '') AS extra
       UNION
-      MATCH (p:DuAn) WHERE toLower(p.ten) CONTAINS toLower($q) OR toLower(p.key) CONTAINS toLower($q)
-      RETURN 'Project' AS type, p.key AS id, p.ten AS name, p.trangThai AS status
+      MATCH (p:DuAn) WHERE toLower(p.ten) CONTAINS toLower($q) OR toLower(p.ma) CONTAINS toLower($q)
+      RETURN 'Project' AS type, p.id AS id, p.ten AS name, p.trang_thai AS extra
       UNION
       MATCH (d:PhongBan) WHERE toLower(d.ten) CONTAINS toLower($q)
-      RETURN 'Department' AS type, d.deptId AS id, d.ten AS name, '' AS description
+      RETURN 'Department' AS type, d.id AS id, d.ten AS name, COALESCE(d.description, '') AS extra
     }`;
         try {
             const rows = await this.neo.run(`${unionBlock}

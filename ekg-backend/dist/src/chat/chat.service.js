@@ -24,6 +24,9 @@ const search_service_1 = require("../search/search.service");
 const conversation_history_service_1 = require("./services/conversation-history.service");
 const redis_conversation_service_1 = require("./services/redis-conversation.service");
 const ollama_rag_service_1 = require("./services/ollama-rag.service");
+const gemini_tools_service_1 = require("../ai/gemini-tools.service");
+const positions_service_1 = require("../positions/positions.service");
+const technologies_service_1 = require("../technologies/technologies.service");
 let ChatService = ChatService_1 = class ChatService {
     queryClassifier;
     ollamaService;
@@ -37,8 +40,11 @@ let ChatService = ChatService_1 = class ChatService {
     conversationHistoryService;
     redisConversationService;
     ollamaRAGService;
+    geminiToolsService;
+    positionsService;
+    technologiesService;
     logger = new common_1.Logger(ChatService_1.name);
-    constructor(queryClassifier, ollamaService, chromaDBService, geminiService, employeesService, skillsService, departmentsService, projectsService, searchService, conversationHistoryService, redisConversationService, ollamaRAGService) {
+    constructor(queryClassifier, ollamaService, chromaDBService, geminiService, employeesService, skillsService, departmentsService, projectsService, searchService, conversationHistoryService, redisConversationService, ollamaRAGService, geminiToolsService, positionsService, technologiesService) {
         this.queryClassifier = queryClassifier;
         this.ollamaService = ollamaService;
         this.chromaDBService = chromaDBService;
@@ -51,6 +57,9 @@ let ChatService = ChatService_1 = class ChatService {
         this.conversationHistoryService = conversationHistoryService;
         this.redisConversationService = redisConversationService;
         this.ollamaRAGService = ollamaRAGService;
+        this.geminiToolsService = geminiToolsService;
+        this.positionsService = positionsService;
+        this.technologiesService = technologiesService;
     }
     async processQuery(message, conversationId, userId) {
         const startTime = Date.now();
@@ -79,7 +88,6 @@ let ChatService = ChatService_1 = class ChatService {
             const nameMatch = message.match(employeeNamePattern);
             if (nameMatch && nameMatch[1]) {
                 const employeeName = nameMatch[1].trim();
-                this.logger.debug(`Early pattern match: employee name query for "${employeeName}"`);
                 try {
                     const found = await this.employeesService.findByName(employeeName, 0, 10);
                     if (found.length === 1) {
@@ -97,12 +105,7 @@ let ChatService = ChatService_1 = class ChatService {
                         response = `Không tìm thấy nhân viên có tên "${employeeName}". Hãy kiểm tra lại tên hoặc thử tìm theo phòng ban.`;
                     }
                     if (activeConversationId) {
-                        try {
-                            await this.redisConversationService.addMessage(activeConversationId, 'assistant', response);
-                        }
-                        catch (error) {
-                            this.logger.warn(`Could not save assistant message: ${error}`);
-                        }
+                        await this.redisConversationService.addMessage(activeConversationId, 'assistant', response);
                     }
                     return {
                         response,
@@ -112,12 +115,21 @@ let ChatService = ChatService_1 = class ChatService {
                         conversationId: activeConversationId,
                     };
                 }
-                catch (error) {
-                    this.logger.warn(`Employee name search failed: ${error}, falling back to normal flow`);
+                catch (e) {
                 }
             }
             const classified = this.queryClassifier.classifyQuery(message);
             this.logger.debug(`Query classified: ${classified.type} (${classified.level})`);
+            if (message.toLowerCase().includes('chức danh') ||
+                message.toLowerCase().includes('vị trí') ||
+                message.toLowerCase().includes('kỹ năng') ||
+                message.toLowerCase().includes('skill') ||
+                message.toLowerCase().includes('danh sách kỹ năng') ||
+                classified.type === 'filter-search') {
+                classified.level = 'complex';
+                classified.type = 'tool-enabled-search';
+                this.logger.log(`🔧 Forced complex level for skill/position/filter query`);
+            }
             switch (classified.level) {
                 case 'simple':
                     response = await this.handleSimpleQuery(classified.type, classified.value);
@@ -161,24 +173,11 @@ let ChatService = ChatService_1 = class ChatService {
         }
         catch (error) {
             this.logger.error(`Error processing query: ${error}`);
-            const processingTime = Date.now() - startTime;
-            let errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            if (errorMessage.includes('Neo4j') ||
-                errorMessage.includes('database') ||
-                errorMessage.includes('connection')) {
-                errorMessage =
-                    `Lỗi kết nối database: ${errorMessage}\n\n` +
-                        `💡 Hướng dẫn khắc phục:\n` +
-                        `1. Kiểm tra Neo4j có đang chạy: docker ps | grep neo4j\n` +
-                        `2. Khởi động Neo4j: cd ekg-backend && docker-compose up -d\n` +
-                        `3. Kiểm tra file .env có đầy đủ: NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD\n` +
-                        `4. Truy cập Neo4j Browser: http://localhost:7474 để kiểm tra`;
-            }
             return {
-                response: `Có lỗi xảy ra: ${errorMessage}`,
+                response: `Có lỗi xảy ra: ${error instanceof Error ? error.message : 'Unknown error'}`,
                 queryType: 'error',
                 queryLevel: 'simple',
-                processingTime,
+                processingTime: Date.now() - startTime,
             };
         }
     }
@@ -430,28 +429,50 @@ let ChatService = ChatService_1 = class ChatService {
                         role: m.role,
                         content: m.content,
                     }));
-                    this.logger.debug(`Retrieved ${conversationHistory.length} messages from Redis`);
                 }
                 catch (error) {
                     this.logger.warn(`Could not retrieve conversation context: ${error}`);
                 }
             }
-            let context = `Bạn là một trợ lý thông minh cho hệ thống quản lý nhân sự và dự án (EKG).\n\n`;
-            try {
-                const employees = await this.employeesService.list();
-                const departments = await this.departmentsService.list();
-                const projects = await this.projectsService.list();
-                context += `Dữ liệu hiện tại:\n- Số nhân viên: ${employees.length}\n- Số phòng ban: ${departments.length}\n- Số dự án: ${projects.length}\n\n`;
+            const tools = this.geminiToolsService.getTools();
+            this.logger.log(`📦 Sending ${tools.length} tools to Gemini: ${tools.map((t) => t.name).join(', ')}`);
+            const context = `Bạn là trợ lý AI cho hệ thống EKG. 
+
+⚠️ IMPORTANT TOOL USAGE RULES:
+1. When user asks "danh sách kỹ năng" or "tất cả kỹ năng" or "có những kỹ năng gì":
+   → MUST use "list_skills" tool (NO parameters needed)
+   → NEVER use "search_employees_by_name" for this
+   
+2. "list_skills" returns ONLY skill names, NOT employee information
+
+3. When user asks about employees with specific skills:
+   → Then use "search_employees_by..." tools
+
+Hãy sử dụng các công cụ được cung cấp để trả lời câu hỏi của người dùng một cách chính xác.`;
+            let geminiResult = await this.geminiService.generateResponseWithTools(message, tools, context, conversationHistory);
+            let loopCount = 0;
+            const maxLoops = 5;
+            while (geminiResult.type === 'function_call' && loopCount < maxLoops) {
+                loopCount++;
+                const toolResults = [];
+                for (const call of geminiResult.functionCalls) {
+                    const toolName = call.name;
+                    const toolArgs = call.args;
+                    this.logger.log(`Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+                    const result = await this.geminiToolsService.executeTool(toolName, toolArgs);
+                    toolResults.push({
+                        name: toolName,
+                        result: result,
+                    });
+                }
+                geminiResult = await this.geminiService.continueChatWithToolResults(geminiResult.chatSession, toolResults);
             }
-            catch (dbError) {
-                this.logger.warn(`Could not fetch database context for complex query: ${dbError}`);
-                context += `Lưu ý: Không thể truy cập dữ liệu database hiện tại.\n\n`;
+            if (geminiResult.type === 'text') {
+                return geminiResult.content;
             }
-            context += `Hãy trả lời bằng tiếng Việt và cung cấp thông tin hữu ích dựa trên dữ liệu hệ thống.`;
-            const response = conversationHistory.length > 0
-                ? await this.geminiService.generateResponseWithHistory(message, conversationHistory, context)
-                : await this.geminiService.generateResponse(message, context);
-            return response;
+            else {
+                return 'Xin lỗi, tôi không thể hoàn thành yêu cầu do quá trình xử lý quá phức tạp.';
+            }
         }
         catch (error) {
             this.logger.error(`Error handling complex query: ${error}`);
@@ -460,62 +481,161 @@ let ChatService = ChatService_1 = class ChatService {
     }
     async indexEntitiesToChromaDB() {
         try {
-            this.logger.log('Starting to index entities to ChromaDB...');
+            this.logger.log('🚀 Starting enhanced indexing to ChromaDB...');
+            this.logger.log('📝 Indexing employees...');
             const employees = await this.employeesService.list();
             if (employees.length > 0) {
-                const empDocs = employees.map((emp) => ({
-                    id: emp.id,
-                    content: `${emp.name} ${emp.position || ''} ${emp.email || ''}`,
+                const empDocs = employees.map((emp) => {
+                    const skillNames = emp.skills?.map((s) => s.name).join(', ') || 'Chưa có kỹ năng';
+                    return {
+                        id: emp.id || emp.empId,
+                        content: `
+Nhân viên ${emp.name}
+Họ tên: ${emp.name}
+Cấp bậc hiện tại: ${emp.level || 'Chưa xác định'}
+Chức danh: ${emp.position || 'Chưa xác định'}
+Email công ty: ${emp.email || 'Chưa có email'}
+Số điện thoại: ${emp.phone || 'Chưa có số điện thoại'}
+Trạng thái làm việc: ${emp.status || 'Active'}
+Kỹ năng: ${skillNames}
+            `.trim(),
+                        metadata: {
+                            type: 'employee',
+                            id: emp.id || emp.empId,
+                            name: emp.name,
+                            level: emp.level || '',
+                            position: emp.position || '',
+                            email: emp.email || '',
+                            phone: emp.phone || '',
+                            status: emp.status || 'Active',
+                            skillNames: emp.skills?.map((s) => s.name) || [],
+                            skillCount: emp.skills?.length || 0,
+                        },
+                    };
+                });
+                await this.chromaDBService.addDocuments('employees', empDocs);
+                this.logger.log(`✅ Indexed ${empDocs.length} employees`);
+            }
+            this.logger.log('📝 Indexing departments...');
+            const departments = await this.departmentsService.list();
+            if (departments.length > 0) {
+                const deptDocs = departments.map((dept) => ({
+                    id: dept.id || dept.code,
+                    content: `
+Phòng ban ${dept.name}
+Tên phòng ban: ${dept.name}
+Mã phòng ban: ${dept.code || 'Chưa có mã'}
+Mô tả: ${dept.description || 'Chưa có mô tả'}
+          `.trim(),
                     metadata: {
-                        type: 'employee',
-                        name: emp.name,
-                        position: emp.position,
-                        email: emp.email,
+                        type: 'department',
+                        id: dept.id || dept.code,
+                        code: dept.code || '',
+                        name: dept.name,
+                        description: dept.description || '',
                     },
                 }));
-                await this.chromaDBService.addDocuments('employees', empDocs);
+                await this.chromaDBService.addDocuments('departments', deptDocs);
+                this.logger.log(`✅ Indexed ${deptDocs.length} departments`);
             }
+            this.logger.log('📝 Indexing projects...');
+            const projects = await this.projectsService.list();
+            if (projects.length > 0) {
+                const projDocs = projects.map((proj) => {
+                    const techList = proj.technologies?.join(', ') || 'Chưa có công nghệ';
+                    return {
+                        id: proj.id || proj.key,
+                        content: `
+Dự án ${proj.name}
+Tên dự án: ${proj.name}
+Mã dự án: ${proj.key || 'Chưa có mã'}
+Trạng thái: ${proj.status || 'Active'}
+Công nghệ sử dụng: ${techList}
+            `.trim(),
+                        metadata: {
+                            type: 'project',
+                            id: proj.id || proj.key,
+                            key: proj.key || '',
+                            name: proj.name,
+                            status: proj.status || '',
+                            technologies: proj.technologies || [],
+                            technologyCount: proj.technologies?.length || 0,
+                        },
+                    };
+                });
+                await this.chromaDBService.addDocuments('projects', projDocs);
+                this.logger.log(`✅ Indexed ${projDocs.length} projects`);
+            }
+            this.logger.log('📝 Indexing skills...');
             const skills = await this.skillsService.list();
             if (skills.length > 0) {
                 const skillDocs = skills.map((skill) => ({
-                    id: skill.id,
-                    content: skill.name,
+                    id: skill.id || skill.name,
+                    content: `
+Kỹ năng ${skill.name}
+Tên kỹ năng: ${skill.name}
+          `.trim(),
                     metadata: {
                         type: 'skill',
+                        id: skill.id || skill.name,
                         name: skill.name,
                     },
                 }));
                 await this.chromaDBService.addDocuments('skills', skillDocs);
+                this.logger.log(`✅ Indexed ${skillDocs.length} skills`);
             }
-            const departments = await this.departmentsService.list();
-            if (departments.length > 0) {
-                const deptDocs = departments.map((dept) => ({
-                    id: dept.id,
-                    content: dept.name,
+            this.logger.log('📝 Indexing positions...');
+            const positions = await this.positionsService.list();
+            if (positions.length > 0) {
+                const posDocs = positions.map((pos) => ({
+                    id: pos.id || pos.code,
+                    content: `
+Chức danh ${pos.name}
+Tên chức danh: ${pos.name}
+Cấp bậc: ${pos.level || 'Chưa xác định'}
+Nhóm nghề: ${pos.group || 'Chưa xác định'}
+Mô tả: ${pos.description || 'Chưa có mô tả'}
+          `.trim(),
                     metadata: {
-                        type: 'department',
-                        name: dept.name,
+                        type: 'position',
+                        id: pos.id || pos.code,
+                        code: pos.code || '',
+                        name: pos.name,
+                        level: pos.level || '',
+                        group: pos.group || '',
+                        description: pos.description || '',
                     },
                 }));
-                await this.chromaDBService.addDocuments('departments', deptDocs);
+                await this.chromaDBService.addDocuments('positions', posDocs);
+                this.logger.log(`✅ Indexed ${posDocs.length} positions`);
             }
-            const projects = await this.projectsService.list();
-            if (projects.length > 0) {
-                const projDocs = projects.map((proj) => ({
-                    id: proj.id,
-                    content: `${proj.name} ${proj.status || ''}`,
+            this.logger.log('📝 Indexing technologies...');
+            const technologies = await this.technologiesService.list();
+            if (technologies.length > 0) {
+                const techDocs = technologies.map((tech) => ({
+                    id: tech.id || tech.code,
+                    content: `
+Công nghệ ${tech.name}
+Tên công nghệ: ${tech.name}
+Loại công nghệ: ${tech.type || 'Chưa xác định'}
+Mô tả: ${tech.description || 'Chưa có mô tả'}
+          `.trim(),
                     metadata: {
-                        type: 'project',
-                        name: proj.name,
-                        status: proj.status,
+                        type: 'technology',
+                        id: tech.id || tech.code,
+                        code: tech.code || '',
+                        name: tech.name,
+                        techType: tech.type || '',
+                        description: tech.description || '',
                     },
                 }));
-                await this.chromaDBService.addDocuments('projects', projDocs);
+                await this.chromaDBService.addDocuments('technologies', techDocs);
+                this.logger.log(`✅ Indexed ${techDocs.length} technologies`);
             }
-            this.logger.log('Indexing completed successfully');
+            this.logger.log('🎉 Enhanced indexing completed successfully!');
         }
         catch (error) {
-            this.logger.error(`Error indexing entities to ChromaDB: ${error}`);
+            this.logger.error(`❌ Error indexing entities to ChromaDB: ${error}`);
             throw error;
         }
     }
@@ -534,6 +654,9 @@ exports.ChatService = ChatService = ChatService_1 = __decorate([
         search_service_1.SearchService,
         conversation_history_service_1.ConversationHistoryService,
         redis_conversation_service_1.RedisConversationService,
-        ollama_rag_service_1.OllamaRAGService])
+        ollama_rag_service_1.OllamaRAGService,
+        gemini_tools_service_1.GeminiToolsService,
+        positions_service_1.PositionsService,
+        technologies_service_1.TechnologiesService])
 ], ChatService);
 //# sourceMappingURL=chat.service.js.map

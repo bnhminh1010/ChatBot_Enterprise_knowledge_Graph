@@ -17,4 +17,9 @@ export declare class DepartmentsService {
     remove(code: string): Promise<{
         ok: boolean;
     }>;
+    searchByCode(code: string): Promise<any[]>;
+    searchByHeadcount(headcount: number): Promise<any[]>;
+    searchByEmail(email: string): Promise<any[]>;
+    getById(id: string): Promise<any>;
+    count(): Promise<number>;
 }
