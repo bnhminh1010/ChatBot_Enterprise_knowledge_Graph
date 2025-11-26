@@ -5,6 +5,7 @@ import { EmployeesService } from '../employees/employees.service';
 import { DepartmentsService } from '../departments/departments.service';
 import { ProjectsService } from '../projects/projects.service';
 import { SkillsService } from '../skills/skills.service';
+import { DocumentsService } from '../documents/documents.service';
 
 export interface ToolDefinition {
   name: string;
@@ -27,7 +28,8 @@ export class GeminiToolsService {
     private readonly departmentsService: DepartmentsService,
     private readonly projectsService: ProjectsService,
     private readonly skillsService: SkillsService,
-  ) {}
+    private readonly documentsService: DocumentsService,
+  ) { }
 
   getTools(): ToolDefinition[] {
     return [
@@ -37,6 +39,7 @@ export class GeminiToolsService {
       ...this.getProjectTools(),
       ...this.getTechnologyTools(),
       ...this.getSkillTools(),
+      ...this.getDocumentTools(),
     ];
   }
 
@@ -329,6 +332,45 @@ export class GeminiToolsService {
     ];
   }
 
+  private getDocumentTools(): ToolDefinition[] {
+    return [
+      {
+        name: 'get_document_content',
+        description:
+          'Lấy nội dung TÀI LIỆU theo ID tài liệu và ID dự án. USE THIS when: lấy tài liệu TL002, nội dung tài liệu, đọc file doc. Keywords: tài liệu, document, nội dung, content',
+        parameters: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'ID của dự án (ví dụ: "DuAn_test_001")',
+            },
+            docId: {
+              type: 'string',
+              description: 'ID của tài liệu (ví dụ: "TL002")',
+            },
+          },
+          required: ['projectId', 'docId'],
+        },
+      },
+      {
+        name: 'list_project_documents',
+        description:
+          'Liệt kê tất cả TÀI LIỆU của một dự án. USE THIS when: danh sách tài liệu, dự án có tài liệu gì, liệt kê file. Keywords: danh sách tài liệu, tài liệu dự án',
+        parameters: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'ID của dự án (ví dụ: "DuAn_test_001")',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+    ];
+  }
+
   async executeTool(name: string, args: any): Promise<any> {
     this.logger.log(
       `🔧 Executing tool: ${name} with args: ${JSON.stringify(args)}`,
@@ -471,6 +513,33 @@ export class GeminiToolsService {
       // Skill tools (1 tool)
       if (name === 'list_skills') {
         const result = await this.skillsService.list();
+        return { data: result };
+      }
+
+      // Document tools (2 tools)
+      if (name === 'get_document_content') {
+        const result = await this.documentsService.getDocumentContent(
+          args.projectId,
+          args.docId,
+        );
+        // Format response: return text content with metadata
+        const contentPreview = result.content.length > 1000
+          ? result.content.substring(0, 1000) + '...(đã cắt bớt)'
+          : result.content;
+
+        return {
+          documentName: result.documentName,
+          documentType: result.documentType,
+          fileType: result.fileInfo.type,
+          contentLength: result.content.length,
+          content: contentPreview,
+          message: `Tài liệu "${result.documentName}" (${result.fileInfo.type}, ${result.fileInfo.size} bytes)`,
+        };
+      }
+      if (name === 'list_project_documents') {
+        const result = await this.documentsService.getProjectDocuments(
+          args.projectId,
+        );
         return { data: result };
       }
 

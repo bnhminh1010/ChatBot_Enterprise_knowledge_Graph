@@ -4,6 +4,7 @@ import { Neo4jModule } from './core/neo4j/neo4j.module';
 import { RedisModule } from './core/redis/redis.module';
 import { EmployeesModule } from './employees/employees.module';
 import { ProjectsModule } from './projects/projects.module';
+import { DocumentsModule } from './documents/documents.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { SkillsModule } from './skills/skills.module';
 import { SearchController } from './search/search.controller';
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     EmployeesModule,
     ProjectsModule,
+    DocumentsModule,
     DepartmentsModule,
     SkillsModule,
     AiModule,

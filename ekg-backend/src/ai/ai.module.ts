@@ -11,6 +11,7 @@ import { EmployeesModule } from '../employees/employees.module';
 import { DepartmentsModule } from '../departments/departments.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { SkillsModule } from '../skills/skills.module';
+import { DocumentsModule } from '../documents/documents.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SkillsModule } from '../skills/skills.module';
     DepartmentsModule,
     ProjectsModule,
     SkillsModule,
+    DocumentsModule,
   ],
   providers: [
     OllamaService,
@@ -37,4 +39,4 @@ import { SkillsModule } from '../skills/skills.module';
     GeminiToolsService,
   ],
 })
-export class AiModule {}
+export class AiModule { }
