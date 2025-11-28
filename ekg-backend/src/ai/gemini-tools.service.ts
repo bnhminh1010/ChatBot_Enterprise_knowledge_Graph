@@ -337,7 +337,11 @@ export class GeminiToolsService {
       {
         name: 'get_document_content',
         description:
-          'Lấy nội dung TÀI LIỆU theo ID tài liệu và ID dự án. USE THIS when: lấy tài liệu TL002, nội dung tài liệu, đọc file doc. Keywords: tài liệu, document, nội dung, content',
+          'Lấy NỘI DUNG tài liệu theo ID. ' +
+          '⚠️ CHỈ DÙNG KHI ĐÃ BIẾT docId (ví dụ: TL002, doc_readme_001). ' +
+          'Nếu user hỏi theo TÊN → dùng search_documents TRƯỚC để tìm docId. ' +
+          'Trả về nội dung + LINK DOWNLOAD dạng markdown [Tải về](url). ' +
+          'Keywords: nội dung tài liệu, đọc file, xem tài liệu',
         parameters: {
           type: 'object',
           properties: {
@@ -366,6 +370,37 @@ export class GeminiToolsService {
             },
           },
           required: ['projectId'],
+        },
+      },
+      {
+        name: 'search_documents',
+        description:
+          '🔍 **PRIMARY TOOL FOR DOCUMENTS** - TÌM KIẾM tài liệu theo TÊN (không cần ID). ' +
+          '⚠️ USE THIS FIRST khi user hỏi về tài liệu BẤT KỲ: "lấy tài liệu X", "tài liệu về Y", "file Z", "doc ABC". ' +
+          'ĐỪNG hỏi user về ID - hãy tìm theo TÊN trước! ' +
+          'Examples: ' +
+          '- "lấy tài liệu thiết kế UI" → search with name="thiết kế UI" ' +
+          '- "tài liệu về API" → search with name="API" ' +
+          '- "file README" → search with name="README" ' +
+          'Response cases: ' +
+          '1 result → auto get content | ' +
+          'Multiple → show numbered list | ' +
+          '0 → suggest alternative names',
+        parameters: {
+          type: 'object',
+          properties: {
+            documentName: {
+              type: 'string',
+              description:
+                'TÊN tài liệu để tìm. Extract từ câu hỏi của user (ví dụ: user nói "lấy tài liệu thiết kế" → documentName="thiết kế")',
+            },
+            projectId: {
+              type: 'string',
+              description:
+                'ID dự án (OPTIONAL). Chỉ điền nếu user EXPLICITLY nói tên dự án cụ thể.',
+            },
+          },
+          required: ['documentName'],
         },
       },
     ];
@@ -533,7 +568,9 @@ export class GeminiToolsService {
           fileType: result.fileInfo.type,
           contentLength: result.content.length,
           content: contentPreview,
-          message: `Tài liệu "${result.documentName}" (${result.fileInfo.type}, ${result.fileInfo.size} bytes)`,
+          sourceUrl: result.sourceUrl,
+          downloadUrl: result.sourceUrl,
+          message: `Tài liệu "${result.documentName}" (${result.fileInfo.type}, ${result.fileInfo.size} bytes). Link tải: ${result.sourceUrl}`,
         };
       }
       if (name === 'list_project_documents') {
@@ -541,6 +578,58 @@ export class GeminiToolsService {
           args.projectId,
         );
         return { data: result };
+      }
+
+      // Search documents by name
+      if (name === 'search_documents') {
+        const results = await this.documentsService.searchDocumentsByName(
+          args.documentName,
+          args.projectId,
+        );
+
+        if (results.length === 0) {
+          return {
+            found: false,
+            count: 0,
+            message: `Không tìm thấy tài liệu nào có tên chứa "${args.documentName}". Hãy thử tên khác hoặc liệt kê tất cả tài liệu.`,
+          };
+        }
+
+        if (results.length === 1) {
+          // Chỉ 1 kết quả → gợi ý lấy ngay
+          const doc = results[0];
+          return {
+            found: true,
+            count: 1,
+            autoSelect: true,
+            document: {
+              id: doc.id,
+              name: doc.name,
+              description: doc.mo_ta,
+              projectId: (doc as any).projectId || 'unknown',
+              type: doc.loai,
+              hasPath: doc.co_duong_dan,
+            },
+            message: `Tìm thấy tài liệu: "${doc.name}" (ID: ${doc.id}). Đang lấy nội dung...`,
+            nextAction: `Gọi get_document_content với docId="${doc.id}" và projectId="${(doc as any).projectId}"`,
+          };
+        }
+
+        // Nhiều kết quả → show list
+        return {
+          found: true,
+          count: results.length,
+          documents: results.map((doc, index) => ({
+            index: index + 1,
+            id: doc.id,
+            name: doc.name,
+            description: doc.mo_ta,
+            projectId: (doc as any).projectId || 'unknown',
+            type: doc.loai,
+            hasPath: doc.co_duong_dan,
+          })),
+          message: `Tìm thấy ${results.length} tài liệu phù hợp với "${args.documentName}". Vui lòng chọn tài liệu bạn muốn xem.`,
+        };
       }
 
       return { error: `Tool ${name} not found` };

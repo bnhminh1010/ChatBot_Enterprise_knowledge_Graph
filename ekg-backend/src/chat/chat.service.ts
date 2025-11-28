@@ -37,7 +37,7 @@ export class ChatService {
     private geminiToolsService: GeminiToolsService,
     private positionsService: PositionsService,
     private technologiesService: TechnologiesService,
-  ) {}
+  ) { }
 
   /**
    * Xử lý user query và trả về response
@@ -153,11 +153,14 @@ export class ChatService {
         message.toLowerCase().includes('kỹ năng') ||
         message.toLowerCase().includes('skill') ||
         message.toLowerCase().includes('danh sách kỹ năng') ||
+        message.toLowerCase().includes('tài liệu') || // Document queries
+        message.toLowerCase().includes('lấy tài liệu') ||
+        message.toLowerCase().includes('file') ||
         classified.type === 'filter-search' // NEW: Upgrade filter-search to complex
       ) {
         classified.level = 'complex';
         classified.type = 'tool-enabled-search';
-        this.logger.log(`🔧 Forced complex level for skill/position/filter query`);
+        this.logger.log(`🔧 Forced complex level for skill/position/filter/document query`);
       }
 
       // Bước 2: Xử lý theo level
@@ -629,7 +632,38 @@ export class ChatService {
       // Enhanced context with explicit tool usage rules
       const context = `Bạn là trợ lý AI cho hệ thống EKG. 
 
-⚠️ IMPORTANT TOOL USAGE RULES:
+⚠️ CRITICAL - DOCUMENT QUERIES (HIGHEST PRIORITY):
+
+🚨 RULE #1 - NEVER ASK FOR DOCUMENT IDs:
+- When user says "lấy tài liệu X", "tìm tài liệu Y", "file Z", "doc ABC"
+- YOU MUST call "search_documents" tool with documentName extracted from user query
+- NEVER reply with "Tôi cần ID dự án" or ask user for any IDs
+- The search_documents tool will handle everything automatically
+
+Example flows:
+- User: "lấy tài liệu README" 
+  → YOU: call search_documents(documentName="README")
+  → System finds 1 result → auto calls get_document_content → show content
+  
+- User: "tài liệu thiết kế UI ZenDo"
+  → YOU: call search_documents(documentName="thiết kế UI ZenDo")
+  → System finds multiple → show numbered list
+  
+- User: "file mô hình đồ thị"
+  → YOU: call search_documents(documentName="mô hình đồ thị")
+  → System finds 0 → suggest alternatives
+
+🔴 FORBIDDEN RESPONSES:
+❌ "Bạn cần cung cấp ID dự án"
+❌ "Vui lòng cho tôi biết ID tài liệu"
+❌ "Tôi cần biết ID của dự án"
+
+✅ CORRECT BEHAVIOR:
+→ Immediately call search_documents tool
+→ Let the system handle the rest
+
+⚠️ OTHER TOOL USAGE RULES:
+
 1. When user asks "danh sách kỹ năng" or "tất cả kỹ năng" or "có những kỹ năng gì":
    → MUST use "list_skills" tool (NO parameters needed)
    → NEVER use "search_employees_by_name" for this

@@ -39,7 +39,7 @@ export class DocumentsService {
   constructor(
     private neo: Neo4jService,
     private documentReader: DocumentReaderService,
-  ) {}
+  ) { }
 
   /**
    * Get all documents for a project
@@ -252,6 +252,48 @@ export class DocumentsService {
     } catch (error) {
       this.logger.error(`Error checking document path: ${error}`);
       return false;
+    }
+  }
+
+  /**
+   * Search documents by name (fuzzy search)
+   * Returns list of matching documents across all projects or specific project
+   */
+  async searchDocumentsByName(
+    documentName: string,
+    projectId?: string,
+  ): Promise<DocumentResult[]> {
+    try {
+      const projectFilter = projectId
+        ? 'MATCH (p:DuAn {id: $projectId})-[:DINH_KEM_TAI_LIEU]->(doc:TaiLieu)'
+        : 'MATCH (doc:TaiLieu)';
+
+      const rows = await this.neo.run(
+        `${projectFilter}
+         WHERE toLower(doc.ten) CONTAINS toLower($documentName)
+         OPTIONAL MATCH (p2:DuAn)-[:DINH_KEM_TAI_LIEU]->(doc)
+         RETURN {
+           id: doc.id,
+           name: doc.ten,
+           duong_dan: doc.duong_dan,
+           loai: COALESCE(doc.loai, 'unknown'),
+           mo_ta: COALESCE(doc.mo_ta, ''),
+           ngay_tao: COALESCE(toString(doc.ngay_tao), ''),
+           co_duong_dan: doc.duong_dan IS NOT NULL,
+           projectId: COALESCE(p2.id, 'unknown')
+         } AS doc
+         ORDER BY doc.name
+         LIMIT 10`,
+        { documentName, projectId },
+      );
+
+      return rows.map((r) => {
+        const row = r as Record<string, unknown>;
+        return row?.doc as DocumentResult;
+      });
+    } catch (error) {
+      this.logger.error(`Error searching documents: ${error}`);
+      return [];
     }
   }
 }
