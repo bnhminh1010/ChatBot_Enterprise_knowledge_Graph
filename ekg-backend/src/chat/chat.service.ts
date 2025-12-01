@@ -16,6 +16,7 @@ import { OllamaRAGService } from './services/ollama-rag.service';
 import { GeminiToolsService } from '../ai/gemini-tools.service';
 import { PositionsService } from '../positions/positions.service';
 import { TechnologiesService } from '../technologies/technologies.service';
+import { UploadIntentHandlerService } from './services/upload-intent-handler.service';
 
 @Injectable()
 export class ChatService {
@@ -37,6 +38,7 @@ export class ChatService {
     private geminiToolsService: GeminiToolsService,
     private positionsService: PositionsService,
     private technologiesService: TechnologiesService,
+    private uploadIntentHandler: UploadIntentHandlerService,
   ) { }
 
   /**
@@ -87,6 +89,35 @@ export class ChatService {
       }
 
       let response = '';
+
+      // ========== UPLOAD INTENT DETECTION ==========
+      if (this.uploadIntentHandler.hasUploadIntent(message)) {
+        this.logger.log('🔍 Detected upload intent');
+        const uploadResponse = await this.uploadIntentHandler.handleUploadIntent(message);
+
+        if (uploadResponse) {
+          const responseStr =
+            uploadResponse.type === 'upload_prompt'
+              ? JSON.stringify(uploadResponse)
+              : uploadResponse.content;
+
+          if (activeConversationId) {
+            await this.redisConversationService.addMessage(
+              activeConversationId,
+              'assistant',
+              responseStr,
+            );
+          }
+
+          return {
+            response: responseStr,
+            queryType: 'upload_intent',
+            queryLevel: 'simple',
+            processingTime: Date.now() - startTime,
+            conversationId: activeConversationId,
+          };
+        }
+      }
 
       // QUICK FIX: Early pattern matching for employee name queries
       // ... (existing code) ...

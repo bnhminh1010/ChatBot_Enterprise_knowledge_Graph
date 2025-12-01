@@ -368,7 +368,6 @@ export class DocumentsService {
 
       await this.neo.run(
         `
-        MATCH (p:DuAn {id: $projectId})
         CREATE (doc:TaiLieu {
           id: $docId,
           ten: $ten,
@@ -382,11 +381,9 @@ export class DocumentsService {
           department_id: $departmentId,
           created_at: datetime($createdAt)
         })
-        CREATE (p)-[:DINH_KEM_TAI_LIEU]->(doc)
         RETURN doc
         `,
         {
-          projectId: dto.projectId,
           docId,
           ten: dto.ten,
           s3Key: uploadResult.key,
@@ -401,8 +398,34 @@ export class DocumentsService {
         },
       );
 
-      // Note: Skipping (:NhanSu)-[:UPLOAD]->(:TaiLieu) relationship
-      // because user said Neo4j DB updates will be done later
+      // Determine target type and ID
+      let finalTargetType = dto.targetType;
+      let finalTargetId = dto.targetId;
+
+      // Backward compatible: projectId → DuAn
+      if (!finalTargetType && dto.projectId) {
+        finalTargetType = 'DuAn' as any;
+        finalTargetId = dto.projectId;
+      }
+
+      // Create relationship to target node (if specified)
+      if (finalTargetType && finalTargetId) {
+        await this.createDocumentRelationship(
+          finalTargetType as string,
+          finalTargetId,
+          docId,
+        );
+      }
+
+      // ALWAYS create UPLOAD relationship with user
+      await this.neo.run(
+        `
+        MATCH (user:NhanSu {id: $userId})
+        MATCH (doc:TaiLieu {id: $docId})
+        CREATE (user)-[:UPLOAD {uploaded_at: datetime()}]->(doc)
+        `,
+        { userId, docId },
+      );
 
       // Generate signed URL
       const downloadUrl = await this.s3Service.getSignedUrl(uploadResult.key);
@@ -418,12 +441,60 @@ export class DocumentsService {
         loai_file: fileExtension.replace('.', ''),
         created_at: now,
         download_url: downloadUrl,
+        targetType: finalTargetType,
+        targetId: finalTargetId,
       };
     } catch (error) {
       this.logger.error(`Failed to upload document: ${error}`);
       throw new ServiceUnavailableException(
         `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+    }
+  }
+
+  /**
+   * Create relationship between document and target node
+   */
+  private async createDocumentRelationship(
+    targetType: string,
+    targetId: string,
+    docId: string,
+  ): Promise<void> {
+    // Map node type to relationship type
+    const relationshipMap: Record<string, string> = {
+      DuAn: 'DINH_KEM_TAI_LIEU',
+      PhongBan: 'TAI_LIEU_PHONG_BAN',
+      CongTy: 'TAI_LIEU_CONG_TY',
+      NhanSu: 'TAI_LIEU_CA_NHAN',
+    };
+
+    const relType = relationshipMap[targetType];
+
+    if (!relType) {
+      this.logger.warn(
+        `Unknown target type: ${targetType}. Skipping relationship creation.`,
+      );
+      return;
+    }
+
+    try {
+      await this.neo.run(
+        `
+        MATCH (target:${targetType} {id: $targetId})
+        MATCH (doc:TaiLieu {id: $docId})
+        MERGE (target)-[:${relType}]->(doc)
+        `,
+        { targetId, docId },
+      );
+
+      this.logger.log(
+        `Created relationship: (${targetType} {id: ${targetId}})-[:${relType}]->(TaiLieu {id: ${docId}})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to create relationship to ${targetType}: ${error}`,
+      );
+      // Don't throw - document is already created, just log the error
     }
   }
 

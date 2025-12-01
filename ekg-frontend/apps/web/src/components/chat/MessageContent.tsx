@@ -3,18 +3,50 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
-import { Check, Copy, Network } from 'lucide-react';
+import { Check, Copy, Network, Upload } from 'lucide-react';
 import { GraphView } from '@/components/graph/GraphView';
 import { shouldShowGraph, createSampleGraphData, parseGraphFromResponse } from '@/lib/graph-parser';
+import { DocumentUploadModal } from './DocumentUploadModal';
 
 interface MessageContentProps {
   content: string;
   role: 'user' | 'assistant';
 }
 
+interface UploadPrompt {
+  type: 'upload_prompt';
+  content: string;
+  action: {
+    type: 'show_upload';
+    config: {
+      targetType: 'DuAn' | 'PhongBan' | 'CongTy';
+      targetId: string;
+      targetName: string;
+    };
+  };
+}
+
 export function MessageContent({ content, role }: MessageContentProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [showGraph, setShowGraph] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  // Parse upload prompt if this is an assistant message
+  const parseUploadPrompt = (text: string): UploadPrompt | null => {
+    if (role !== 'assistant') return null;
+    
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.type === 'upload_prompt' && parsed.action?.config) {
+        return parsed as UploadPrompt;
+      }
+    } catch {
+      // Not JSON or invalid format, treat as regular message
+    }
+    return null;
+  };
+
+  const uploadPrompt = parseUploadPrompt(content);
 
   const handleCopy = (code: string, index: number) => {
     navigator.clipboard.writeText(code);
@@ -22,10 +54,45 @@ export function MessageContent({ content, role }: MessageContentProps) {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  // Check if we should show graph visualization
-  const shouldDisplayGraph = role === 'assistant' && shouldShowGraph(content);
+  // Check if we should show graph visualization (only for non-upload-prompt content)
+  const shouldDisplayGraph = role === 'assistant' && !uploadPrompt && shouldShowGraph(content);
   const graphData = shouldDisplayGraph ? (parseGraphFromResponse(content) || createSampleGraphData()) : null;
 
+  // If this is an upload prompt, render special UI instead of markdown
+  if (uploadPrompt) {
+    return (
+      <div className={`markdown-content ${role === 'user' ? 'text-white' : 'text-foreground'}`}>
+        <div className="space-y-3">
+          <div className="prose dark:prose-invert max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {uploadPrompt.content}
+            </ReactMarkdown>
+          </div>
+          
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg font-medium"
+          >
+            <Upload className="w-5 h-5" />
+            <span>📎 Upload Tài Liệu</span>
+          </button>
+
+          <DocumentUploadModal
+            isOpen={showUploadModal}
+            onClose={() => setShowUploadModal(false)}
+            config={uploadPrompt.action.config}
+            onSuccess={(result) => {
+              console.log('Upload success:', result);
+              setShowUploadModal(false);
+              // TODO: Add success message to chat
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Regular message rendering
   return (
     <div className={`markdown-content ${role === 'user' ? 'text-white' : 'text-foreground'}`}>
       <ReactMarkdown

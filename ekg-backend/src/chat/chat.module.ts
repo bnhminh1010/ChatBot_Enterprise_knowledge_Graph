@@ -8,6 +8,7 @@ import { ConversationHistoryService } from './services/conversation-history.serv
 import { RedisConversationService } from './services/redis-conversation.service';
 import { OllamaRAGService } from './services/ollama-rag.service';
 import { ChromaIndexingService } from './services/chroma-indexing.service';
+import { UploadIntentHandlerService } from './services/upload-intent-handler.service';
 import { AiModule } from '../ai/ai.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { SkillsModule } from '../skills/skills.module';
@@ -41,6 +42,7 @@ import { DocumentsModule } from '../documents/documents.module';
     RedisConversationService,
     OllamaRAGService,
     ChromaIndexingService,
+    UploadIntentHandlerService,
   ],
   exports: [ChatService],
 })
