@@ -16,6 +16,7 @@ const metrics_service_1 = require("./services/metrics.service");
 const conversation_history_service_1 = require("./services/conversation-history.service");
 const redis_conversation_service_1 = require("./services/redis-conversation.service");
 const ollama_rag_service_1 = require("./services/ollama-rag.service");
+const chroma_indexing_service_1 = require("./services/chroma-indexing.service");
 const ai_module_1 = require("../ai/ai.module");
 const employees_module_1 = require("../employees/employees.module");
 const skills_module_1 = require("../skills/skills.module");
@@ -25,6 +26,7 @@ const search_module_1 = require("../search/search.module");
 const neo4j_module_1 = require("../core/neo4j/neo4j.module");
 const positions_module_1 = require("../positions/positions.module");
 const technologies_module_1 = require("../technologies/technologies.module");
+const documents_module_1 = require("../documents/documents.module");
 let ChatModule = class ChatModule {
 };
 exports.ChatModule = ChatModule;
@@ -40,6 +42,7 @@ exports.ChatModule = ChatModule = __decorate([
             neo4j_module_1.Neo4jModule,
             positions_module_1.PositionsModule,
             technologies_module_1.TechnologiesModule,
+            documents_module_1.DocumentsModule,
         ],
         controllers: [chat_controller_1.ChatController, conversations_controller_1.ConversationsController],
         providers: [
@@ -49,6 +52,7 @@ exports.ChatModule = ChatModule = __decorate([
             conversation_history_service_1.ConversationHistoryService,
             redis_conversation_service_1.RedisConversationService,
             ollama_rag_service_1.OllamaRAGService,
+            chroma_indexing_service_1.ChromaIndexingService,
         ],
         exports: [chat_service_1.ChatService],
     })

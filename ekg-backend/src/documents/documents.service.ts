@@ -3,18 +3,30 @@ import {
   NotFoundException,
   ServiceUnavailableException,
   Logger,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
 import { DocumentReaderService } from './document-reader.service';
+import { S3Service } from '../aws/s3.service';
+import {
+  CreateDocumentDto,
+  UploadResponseDto,
+} from './dto/create-document.dto';
+import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
 
 interface DocumentResult {
   id: string;
   name: string;
   duong_dan: string | null;
+  s3_key?: string | null;
+  s3_bucket?: string | null;
   loai: string;
   mo_ta: string;
   ngay_tao: string;
   co_duong_dan: boolean;
+  file_size?: number;
 }
 
 interface DocumentContent {
@@ -39,7 +51,8 @@ export class DocumentsService {
   constructor(
     private neo: Neo4jService,
     private documentReader: DocumentReaderService,
-  ) { }
+    private s3Service: S3Service,
+  ) {}
 
   /**
    * Get all documents for a project
@@ -50,18 +63,19 @@ export class DocumentsService {
       const rows = await this.neo.run(
         `MATCH (p:DuAn {id: $projectId})
          OPTIONAL MATCH (p)-[:DINH_KEM_TAI_LIEU]->(doc:TaiLieu)
+         WITH p, collect({
+           id: doc.id,
+           name: doc.ten,
+           duong_dan: doc.duong_dan,
+           loai: COALESCE(doc.loai, 'unknown'),
+           mo_ta: COALESCE(doc.mo_ta, ''),
+           ngay_tao: COALESCE(toString(doc.ngay_tao), ''),
+           co_duong_dan: doc.duong_dan IS NOT NULL
+         }) AS docs
          RETURN {
            projectId: p.id,
            projectName: p.ten,
-           documents: collect({
-             id: doc.id,
-             name: doc.ten,
-             duong_dan: doc.duong_dan,
-             loai: COALESCE(doc.loai, 'unknown'),
-             mo_ta: COALESCE(doc.mo_ta, ''),
-             ngay_tao: COALESCE(toString(doc.ngay_tao), ''),
-             co_duong_dan: doc.duong_dan IS NOT NULL
-           }) AS docs
+           documents: docs
          } AS result`,
         { projectId },
       );
@@ -115,8 +129,8 @@ export class DocumentsService {
   }
 
   /**
-   * Get document content from URL stored in duong_dan attribute
-   * Main feature: Downloads and parses file content
+   * Get document content with PRIORITY LOGIC
+   * Priority: if s3_key exists → S3, else → GitHub URL (backward compatible)
    */
   async getDocumentContent(
     projectId: string,
@@ -126,18 +140,40 @@ export class DocumentsService {
       // Step 1: Get document from Neo4j
       const doc = await this.getDocumentById(projectId, docId);
 
-      if (!doc?.co_duong_dan || !doc?.duong_dan) {
+      let result: {
+        content: string;
+        fileType: string;
+        fileName: string;
+        size: number;
+      };
+      let sourceUrl: string;
+
+      // PRIORITY LOGIC
+      if (doc.s3_key) {
+        // Priority 1: Read from S3
+        this.logger.log(`Reading document from S3: ${doc.s3_key}`);
+
+        result = await this.documentReader.readDocumentFromS3(
+          doc.s3_key,
+          doc.s3_bucket || process.env.AWS_S3_BUCKET || 'ekg-documents',
+          doc.name,
+        );
+        sourceUrl = `s3://${doc.s3_bucket}/${doc.s3_key}`;
+
+        // Cleanup happens inside readDocumentFromS3
+      } else if (doc.duong_dan) {
+        // Priority 2: Fallback to GitHub URL (backward compatible)
+        this.logger.log(`Reading document from URL: ${doc.duong_dan}`);
+
+        result = await this.documentReader.readDocumentFromUrl(doc.duong_dan);
+        sourceUrl = doc.duong_dan;
+
+        // Cleanup happens inside readDocumentFromUrl
+      } else {
         throw new NotFoundException(
-          'Document does not have a path (duong_dan) configured',
+          'Document has no storage location (no s3_key or duong_dan)',
         );
       }
-
-      this.logger.log(`Reading document content from: ${doc.duong_dan}`);
-
-      // Step 2: Download and parse file from URL
-      const result = await this.documentReader.readDocumentFromUrl(
-        doc.duong_dan,
-      );
 
       // Return content with metadata
       return {
@@ -145,7 +181,7 @@ export class DocumentsService {
         documentName: doc?.name || '',
         documentType: doc?.loai || '',
         description: doc?.mo_ta || '',
-        sourceUrl: doc?.duong_dan || '',
+        sourceUrl,
         fileInfo: {
           type: result.fileType,
           fileName: result.fileName,
@@ -294,6 +330,260 @@ export class DocumentsService {
     } catch (error) {
       this.logger.error(`Error searching documents: ${error}`);
       return [];
+    }
+  }
+
+  /**
+   * Upload document to S3 and create TaiLieu node in Neo4j
+   * S3 key structure: documents/{departmentId}/{userId}/{filename} (NO UUID)
+   */
+  async uploadDocument(
+    file: Express.Multer.File,
+    dto: CreateDocumentDto,
+    userId: string,
+    departmentId: string,
+  ): Promise<UploadResponseDto> {
+    try {
+      const fileExtension = path.extname(file.originalname);
+      const fileName = file.originalname;
+
+      // Generate S3 key: documents/{departmentId}/{userId}/{filename}
+      // NO UUID because S3 Versioning handles duplicates
+      const s3Key = `documents/${departmentId}/${userId}/${fileName}`;
+
+      this.logger.log(
+        `Uploading document: ${fileName} (${(file.size / 1024 / 1024).toFixed(2)}MB) to ${s3Key}`,
+      );
+
+      // Upload to S3 (auto multi-part if >= 50MB)
+      const uploadResult = await this.s3Service.uploadFile(
+        file.buffer,
+        s3Key,
+        file.mimetype,
+      );
+
+      // Create TaiLieu node in Neo4j
+      const docId = uuidv4();
+      const now = new Date().toISOString();
+
+      await this.neo.run(
+        `
+        MATCH (p:DuAn {id: $projectId})
+        CREATE (doc:TaiLieu {
+          id: $docId,
+          ten: $ten,
+          s3_key: $s3Key,
+          s3_bucket: $s3Bucket,
+          file_size: $fileSize,
+          loai_file: $loaiFile,
+          mo_ta: $moTa,
+          tag: $tag,
+          version: $version,
+          department_id: $departmentId,
+          created_at: datetime($createdAt)
+        })
+        CREATE (p)-[:DINH_KEM_TAI_LIEU]->(doc)
+        RETURN doc
+        `,
+        {
+          projectId: dto.projectId,
+          docId,
+          ten: dto.ten,
+          s3Key: uploadResult.key,
+          s3Bucket: uploadResult.bucket,
+          fileSize: file.size,
+          loaiFile: fileExtension.replace('.', ''),
+          moTa: dto.mo_ta || '',
+          tag: dto.tag || [],
+          version: dto.version || '1.0',
+          departmentId,
+          createdAt: now,
+        },
+      );
+
+      // Note: Skipping (:NhanSu)-[:UPLOAD]->(:TaiLieu) relationship
+      // because user said Neo4j DB updates will be done later
+
+      // Generate signed URL
+      const downloadUrl = await this.s3Service.getSignedUrl(uploadResult.key);
+
+      this.logger.log(`Document uploaded successfully: ${docId}`);
+
+      return {
+        id: docId,
+        ten: dto.ten,
+        s3_key: uploadResult.key,
+        s3_bucket: uploadResult.bucket,
+        file_size: file.size,
+        loai_file: fileExtension.replace('.', ''),
+        created_at: now,
+        download_url: downloadUrl,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to upload document: ${error}`);
+      throw new ServiceUnavailableException(
+        `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Get pre-signed download URL for document
+   */
+  async getDownloadUrl(
+    projectId: string,
+    docId: string,
+  ): Promise<{ url: string; expiresIn: number }> {
+    try {
+      const doc = await this.getDocumentById(projectId, docId);
+
+      if (!doc.s3_key) {
+        throw new NotFoundException('Document is not stored in S3');
+      }
+
+      const url = await this.s3Service.getSignedUrl(doc.s3_key);
+
+      return {
+        url,
+        expiresIn: 3600, // 60 minutes
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to get download URL: ${error}`);
+      throw new ServiceUnavailableException('Failed to generate download URL');
+    }
+  }
+
+  /**
+   * Delete document from S3 and Neo4j
+   * Note: Permission check via (:NhanSu)-[:UPLOAD]->(:TaiLieu) will be added
+   * when Neo4j DB is updated
+   */
+  async deleteDocument(
+    projectId: string,
+    docId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      // Get document
+      const doc = await this.getDocumentById(projectId, docId);
+
+      // TODO: Verify permissions when Neo4j relationship is added
+      // MATCH (u:NhanSu {id: userId})-[:UPLOAD]->(doc:TaiLieu {id: docId})
+      // OR check if user.role = 'admin'
+
+      // Delete from S3 if it has s3_key
+      if (doc.s3_key) {
+        await this.s3Service.deleteFile(doc.s3_key);
+        this.logger.log(`Deleted file from S3: ${doc.s3_key}`);
+      }
+
+      // Delete node and relationships from Neo4j
+      await this.neo.run(
+        `
+        MATCH (doc:TaiLieu {id: $docId})
+        DETACH DELETE doc
+        `,
+        { docId },
+      );
+
+      this.logger.log(`Deleted document: ${docId}`);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to delete document: ${error}`);
+      throw new ServiceUnavailableException('Failed to delete document');
+    }
+  }
+
+  /**
+   * Get document by ID only (without projectId requirement)
+   * For company-level documents or direct access
+   */
+  async getDocumentByIdDirect(docId: string): Promise<DocumentResult> {
+    try {
+      const rows = await this.neo.run(
+        `MATCH (doc:TaiLieu {id: $docId})
+         RETURN {
+           id: doc.id,
+           name: doc.ten,
+           duong_dan: doc.duong_dan,
+           s3_key: doc.s3_key,
+           s3_bucket: doc.s3_bucket,
+           loai: COALESCE(doc.loai_file, 'unknown'),
+           mo_ta: COALESCE(doc.mo_ta, ''),
+           ngay_tao: COALESCE(toString(doc.created_at), ''),
+           co_duong_dan: doc.duong_dan IS NOT NULL OR doc.s3_key IS NOT NULL,
+           file_size: doc.file_size
+         } AS doc`,
+        { docId },
+      );
+
+      if (!rows[0]) {
+        throw new NotFoundException(`Document ${docId} not found`);
+      }
+
+      const firstRow = rows[0] as Record<string, unknown>;
+      return firstRow?.doc as DocumentResult;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Error getting document: ${error}`);
+      throw new ServiceUnavailableException('Failed to retrieve document');
+    }
+  }
+
+  /**
+   * Get document content by docId only (without project requirement)
+   * Uses same priority logic: s3_key first, then duong_dan
+   */
+  async getDocumentContentDirect(docId: string): Promise<DocumentContent> {
+    try {
+      const doc = await this.getDocumentByIdDirect(docId);
+
+      let result: {
+        content: string;
+        fileType: string;
+        fileName: string;
+        size: number;
+      };
+      let sourceUrl: string;
+
+      // PRIORITY LOGIC (same as getDocumentContent)
+      if (doc.s3_key) {
+        this.logger.log(`[Direct] Reading document from S3: ${doc.s3_key}`);
+        result = await this.documentReader.readDocumentFromS3(
+          doc.s3_key,
+          doc.s3_bucket || process.env.AWS_S3_BUCKET || 'ekg-documents',
+          doc.name,
+        );
+        sourceUrl = `s3://${doc.s3_bucket}/${doc.s3_key}`;
+      } else if (doc.duong_dan) {
+        this.logger.log(`[Direct] Reading document from URL: ${doc.duong_dan}`);
+        result = await this.documentReader.readDocumentFromUrl(doc.duong_dan);
+        sourceUrl = doc.duong_dan;
+      } else {
+        throw new NotFoundException('Document has no storage location');
+      }
+
+      return {
+        documentId: doc?.id || '',
+        documentName: doc?.name || '',
+        documentType: doc?.loai || '',
+        description: doc?.mo_ta || '',
+        sourceUrl,
+        fileInfo: {
+          type: result.fileType,
+          fileName: result.fileName,
+          size: result.size,
+        },
+        content: result.content,
+        retrievedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Error reading document content (direct): ${error}`);
+      throw new ServiceUnavailableException(
+        `Failed to read document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 }

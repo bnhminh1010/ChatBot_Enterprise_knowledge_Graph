@@ -3,13 +3,14 @@ import * as axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { S3Service } from '../aws/s3.service';
 
 @Injectable()
 export class DocumentReaderService {
   private readonly logger = new Logger(DocumentReaderService.name);
   private readonly tempDir = path.join(os.tmpdir(), 'ekg-documents');
 
-  constructor() {
+  constructor(private readonly s3Service: S3Service) {
     // Ensure temp directory exists
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
@@ -51,8 +52,12 @@ export class DocumentReaderService {
 
       return tempFilePath;
     } catch (error) {
-      this.logger.error(`Error downloading file: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      throw new BadRequestException(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Error downloading file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw new BadRequestException(
+        `Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -80,7 +85,9 @@ export class DocumentReaderService {
           throw new BadRequestException(`Unsupported file type: ${extension}`);
       }
     } catch (error) {
-      this.logger.error(`Error parsing file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Error parsing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
       throw error;
     }
   }
@@ -110,7 +117,9 @@ export class DocumentReaderService {
       // Step 4: Extract filename from URL
       const fileName = this.extractFilename(url);
 
-      this.logger.log(`Successfully read document: ${fileName} (${stats.size} bytes)`);
+      this.logger.log(
+        `Successfully read document: ${fileName} (${stats.size} bytes)`,
+      );
 
       return {
         content,
@@ -169,14 +178,18 @@ export class DocumentReaderService {
       for (let pageNum = 1; pageNum <= document.numPages; pageNum++) {
         const page = await document.getPage(pageNum);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
         fullText += pageText + '\n';
       }
 
       return fullText;
     } catch (error) {
       this.logger.warn('pdfjs-dist not available, using fallback');
-      throw new BadRequestException('PDF parsing requires pdfjs-dist package. Please install: npm install pdfjs-dist');
+      throw new BadRequestException(
+        'PDF parsing requires pdfjs-dist package. Please install: npm install pdfjs-dist',
+      );
     }
   }
 
@@ -280,6 +293,70 @@ export class DocumentReaderService {
     } catch (error) {
       this.logger.warn(`Failed to cleanup temp files: ${error}`);
       return 0;
+    }
+  }
+
+  /**
+   * Read document from S3
+   * Downloads file from S3, parses it, and cleans up temp file
+   */
+  async readDocumentFromS3(
+    s3Key: string,
+    s3Bucket: string,
+    fileName: string,
+  ): Promise<{
+    content: string;
+    fileType: string;
+    fileName: string;
+    size: number;
+  }> {
+    let tempFilePath: string | null = null;
+
+    try {
+      this.logger.log(`Reading document from S3: ${s3Key}`);
+
+      // Step 1: Download file from S3
+      const buffer = await this.s3Service.getObject(s3Key);
+
+      // Step 2: Save to temp file
+      // CRITICAL: Get extension from s3_key, NOT from fileName (which may not have extension)
+      const extension = path.extname(s3Key); // Get from S3 key: ".docx"
+      const timestamp = Date.now();
+      
+      // Build temp file path WITH extension
+      tempFilePath = path.join(this.tempDir, `${timestamp}-${fileName}${extension}`);
+      fs.writeFileSync(tempFilePath, buffer);
+
+      this.logger.debug(
+        `Downloaded from S3 to temp: ${tempFilePath} (${buffer.length} bytes)`,
+      );
+
+      // Step 3: Parse file (reuse existing parseFile method)
+      const content = await this.parseFile(tempFilePath);
+
+      this.logger.log(
+        `Successfully read document from S3: ${fileName} (${buffer.length} bytes)`,
+      );
+
+      // Step 4: Return parsed content
+      return {
+        content,
+        fileType: extension.replace('.', ''),
+        fileName,
+        size: buffer.length,
+      };
+    } finally {
+      // Step 5: CRITICAL - Clean up temp file trong finally block
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+          this.logger.debug(`Cleaned up temp file: ${tempFilePath}`);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to clean up temp file: ${tempFilePath} - ${err}`,
+          );
+        }
+      }
     }
   }
 }

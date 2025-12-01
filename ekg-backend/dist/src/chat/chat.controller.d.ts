@@ -1,16 +1,20 @@
 import { ChatService } from './chat.service';
 import { MetricsService } from './services/metrics.service';
+import { ChromaIndexingService } from './services/chroma-indexing.service';
 import { ChatQueryDto, ChatResponseDto } from './dto/chat-query.dto';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
 export declare class ChatController {
     private chatService;
     private metricsService;
+    private chromaIndexingService;
     private neo4jService;
     private readonly logger;
-    constructor(chatService: ChatService, metricsService: MetricsService, neo4jService: Neo4jService);
+    constructor(chatService: ChatService, metricsService: MetricsService, chromaIndexingService: ChromaIndexingService, neo4jService: Neo4jService);
     processQuery(dto: ChatQueryDto, user: any): Promise<ChatResponseDto>;
     indexEntities(): Promise<{
+        success: boolean;
         message: string;
+        details: any;
     }>;
     health(): Promise<{
         status: string;

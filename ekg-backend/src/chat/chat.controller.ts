@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Get, Logger, UseGuards } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { MetricsService } from './services/metrics.service';
+import { ChromaIndexingService } from './services/chroma-indexing.service';
 import { ChatQueryDto, ChatResponseDto } from './dto/chat-query.dto';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,6 +16,7 @@ export class ChatController {
   constructor(
     private chatService: ChatService,
     private metricsService: MetricsService,
+    private chromaIndexingService: ChromaIndexingService,
     private neo4jService: Neo4jService,
   ) {}
 
@@ -24,7 +26,7 @@ export class ChatController {
    */
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'VIEWER')  // Both roles can chat
+  @Roles('ADMIN', 'VIEWER') // Both roles can chat
   async processQuery(
     @Body() dto: ChatQueryDto,
     @CurrentUser() user: any,
@@ -34,7 +36,7 @@ export class ChatController {
       const result = await this.chatService.processQuery(
         dto.message,
         dto.conversationId,
-        user.username,  // ← From authenticated user
+        user.username, // ← From authenticated user
       );
 
       return {
@@ -57,10 +59,10 @@ export class ChatController {
    * Manually trigger indexing of entities to ChromaDB
    */
   @Post('index')
-  async indexEntities(): Promise<{ message: string }> {
+  async indexEntities() {
     try {
-      await this.chatService.indexEntitiesToChromaDB();
-      return { message: 'Entities indexed successfully to ChromaDB' };
+      const result = await this.chromaIndexingService.indexAll();
+      return result;
     } catch (error) {
       this.logger.error(`Error indexing entities: ${error}`);
       throw error;
@@ -107,8 +109,7 @@ export class ChatController {
     };
 
     const allHealthy =
-      neo4jStatus === true &&
-      Object.values(envStatus).every((x) => x === true);
+      neo4jStatus === true && Object.values(envStatus).every((x) => x === true);
 
     return {
       status: allHealthy ? 'ok' : 'degraded',

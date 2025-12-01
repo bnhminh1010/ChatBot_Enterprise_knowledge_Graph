@@ -7,6 +7,7 @@ import { MetricsService } from './services/metrics.service';
 import { ConversationHistoryService } from './services/conversation-history.service';
 import { RedisConversationService } from './services/redis-conversation.service';
 import { OllamaRAGService } from './services/ollama-rag.service';
+import { ChromaIndexingService } from './services/chroma-indexing.service';
 import { AiModule } from '../ai/ai.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { SkillsModule } from '../skills/skills.module';
@@ -16,6 +17,7 @@ import { SearchModule } from '../search/search.module';
 import { Neo4jModule } from '../core/neo4j/neo4j.module';
 import { PositionsModule } from '../positions/positions.module';
 import { TechnologiesModule } from '../technologies/technologies.module';
+import { DocumentsModule } from '../documents/documents.module';
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { TechnologiesModule } from '../technologies/technologies.module';
     Neo4jModule,
     PositionsModule,
     TechnologiesModule,
+    DocumentsModule,
   ],
   controllers: [ChatController, ConversationsController],
   providers: [
@@ -37,6 +40,7 @@ import { TechnologiesModule } from '../technologies/technologies.module';
     ConversationHistoryService,
     RedisConversationService,
     OllamaRAGService,
+    ChromaIndexingService,
   ],
   exports: [ChatService],
 })

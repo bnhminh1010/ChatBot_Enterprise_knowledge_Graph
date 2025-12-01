@@ -13,6 +13,7 @@ const neo4j_module_1 = require("./core/neo4j/neo4j.module");
 const redis_module_1 = require("./core/redis/redis.module");
 const employees_module_1 = require("./employees/employees.module");
 const projects_module_1 = require("./projects/projects.module");
+const documents_module_1 = require("./documents/documents.module");
 const departments_module_1 = require("./departments/departments.module");
 const skills_module_1 = require("./skills/skills.module");
 const search_controller_1 = require("./search/search.controller");
@@ -37,6 +38,7 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             employees_module_1.EmployeesModule,
             projects_module_1.ProjectsModule,
+            documents_module_1.DocumentsModule,
             departments_module_1.DepartmentsModule,
             skills_module_1.SkillsModule,
             ai_module_1.AiModule,

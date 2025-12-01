@@ -60,7 +60,15 @@ export class ChromaDBService implements OnModuleInit {
    * Khởi tạo collections
    */
   private async initializeCollections() {
-    const collectionNames = ['employees', 'skills', 'departments', 'projects', 'positions', 'technologies'];
+    const collectionNames = [
+      'employees',
+      'skills',
+      'departments',
+      'projects',
+      'positions',
+      'technologies',
+      'documents',
+    ];
 
     for (const name of collectionNames) {
       const filePath = path.join(this.chromadbPath, `${name}.json`);
@@ -102,8 +110,9 @@ export class ChromaDBService implements OnModuleInit {
       // Generate embeddings cho mỗi document
       for (const doc of documents) {
         try {
-          const embedding =
-            await this.ollamaService.generateEmbedding(doc.content);
+          const embedding = await this.ollamaService.generateEmbedding(
+            doc.content,
+          );
           const vector: StoredVector = {
             id: doc.id,
             embedding,
@@ -223,7 +232,9 @@ export class ChromaDBService implements OnModuleInit {
     try {
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
     } catch (error) {
-      this.logger.error(`Failed to save collection ${collectionName}: ${error}`);
+      this.logger.error(
+        `Failed to save collection ${collectionName}: ${error}`,
+      );
       throw error;
     }
   }
@@ -270,4 +281,3 @@ export class ChromaDBService implements OnModuleInit {
     return Array.from(this.collections.keys());
   }
 }
-

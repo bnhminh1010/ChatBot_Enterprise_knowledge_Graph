@@ -14,12 +14,13 @@ export class ProjectsService {
       const rows = await this.neo.run(
         `MATCH (p:DuAn)
          OPTIONAL MATCH (p)-[:SU_DUNG_CONG_NGHE]->(c:CongNghe)
+         WITH p, collect(DISTINCT c.ten) AS techs
          RETURN {
            id: p.id,
            key: p.ma,
            name: p.ten,
            status: COALESCE(p.trang_thai, 'Active'),
-           technologies: collect(DISTINCT c.ten)
+           technologies: techs
          } AS prj
          ORDER BY p.ten`,
       );

@@ -6,6 +6,7 @@ import { DepartmentsService } from '../departments/departments.service';
 import { ProjectsService } from '../projects/projects.service';
 import { SkillsService } from '../skills/skills.service';
 import { DocumentsService } from '../documents/documents.service';
+import { ChromaDBService } from './chroma-db.service';
 
 export interface ToolDefinition {
   name: string;
@@ -29,10 +30,14 @@ export class GeminiToolsService {
     private readonly projectsService: ProjectsService,
     private readonly skillsService: SkillsService,
     private readonly documentsService: DocumentsService,
-  ) { }
+    private readonly chromaDBService: ChromaDBService,
+  ) {}
 
   getTools(): ToolDefinition[] {
     return [
+      // ⚡ UNIVERSAL SEARCH - Dùng trước tiên
+      ...this.getUniversalTools(),
+      // Specific tools (backup)
       ...this.getEmployeeTools(),
       ...this.getPositionTools(),
       ...this.getDepartmentTools(),
@@ -40,6 +45,43 @@ export class GeminiToolsService {
       ...this.getTechnologyTools(),
       ...this.getSkillTools(),
       ...this.getDocumentTools(),
+    ];
+  }
+
+  /**
+   * 🚀 UNIVERSAL SEARCH TOOL
+   * Vector search qua TẤT CẢ data - agent tự generate query
+   */
+  private getUniversalTools(): ToolDefinition[] {
+    return [
+      {
+        name: 'universal_search',
+        description:
+          '🌟 UNIVERSAL VECTOR SEARCH - TÌM BẤT KỲ THÔNG TIN GÌ trong hệ thống. ' +
+          'Tự động search qua: employees, projects, documents, skills, departments, positions, technologies. ' +
+          'USE THIS FIRST cho MỌI query search. ' +
+          'Agent TỰ GENERATE query phù hợp. ' +
+          'Examples: ' +
+          '- "tài liệu ZenDo" → query="ZenDo Focus App document" ' +
+          '- "senior dev React" → query="senior developer React programming" ' +
+          '- "dự án VinGroup" → query="VinGroup project client" ' +
+          'LUÔN ƯU TIÊN TOOL NÀY.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description:
+                'Free-form search query (tiếng Anh hoặc Việt). Agent TỰ NGHĨ RA query tốt nhất dựa trên câu hỏi của user. Include keywords, context, mô tả chi tiết.',
+            },
+            limit: {
+              type: 'number',
+              description: 'Số kết quả tối đa (default: 10)',
+            },
+          },
+          required: ['query'],
+        },
+      },
     ];
   }
 
@@ -338,23 +380,25 @@ export class GeminiToolsService {
         name: 'get_document_content',
         description:
           'Lấy NỘI DUNG tài liệu theo ID. ' +
-          '⚠️ CHỈ DÙNG KHI ĐÃ BIẾT docId (ví dụ: TL002, doc_readme_001). ' +
+          '⚠️ CHỈ DÙNG KHI ĐÃ BIẾT docId (ví dụ: TL001, TL002). ' +
           'Nếu user hỏi theo TÊN → dùng search_documents TRƯỚC để tìm docId. ' +
-          'Trả về nội dung + LINK DOWNLOAD dạng markdown [Tải về](url). ' +
+          'projectId là OPTIONAL - chỉ cần nếu document thuộc project. ' +
+          'Company documents (như TL001) KHÔNG CẦN projectId. ' +
+          'Trả về nội dung + LINK DOWNLOAD. ' +
           'Keywords: nội dung tài liệu, đọc file, xem tài liệu',
         parameters: {
           type: 'object',
           properties: {
-            projectId: {
-              type: 'string',
-              description: 'ID của dự án (ví dụ: "DuAn_test_001")',
-            },
             docId: {
               type: 'string',
-              description: 'ID của tài liệu (ví dụ: "TL002")',
+              description: 'ID của tài liệu (VD: "TL001", "TL002"). BẮT BUỘC.',
+            },
+            projectId: {
+              type: 'string',
+              description: 'ID của dự án (OPTIONAL - chỉ cần cho project documents)',
             },
           },
-          required: ['projectId', 'docId'],
+          required: ['docId'],
         },
       },
       {
@@ -411,6 +455,42 @@ export class GeminiToolsService {
       `🔧 Executing tool: ${name} with args: ${JSON.stringify(args)}`,
     );
     try {
+      // ⚡ UNIVERSAL SEARCH - ChromaDB Vector Search
+      if (name === 'universal_search') {
+        const query = args.query;
+        const limit = args.limit || 10;
+
+        this.logger.log(`🌟 Universal search: "${query}" (limit: ${limit})`);
+
+        // Search across ALL collections in ChromaDB
+        const results = await Promise.all([
+          this.chromaDBService
+            .search('employees', query, limit)
+            .catch(() => []),
+          this.chromaDBService
+            .search('departments', query, limit)
+            .catch(() => []),
+          this.chromaDBService.search('projects', query, limit).catch(() => []),
+          this.chromaDBService.search('skills', query, limit).catch(() => []),
+        ]);
+
+        // Flatten and combine results
+        const allResults = results
+          .flat()
+          .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
+          .slice(0, limit);
+
+        this.logger.log(
+          `✅ Found ${allResults.length} results via vector search`,
+        );
+
+        return {
+          data: allResults,
+          total: allResults.length,
+          message: `Tìm thấy ${allResults.length} kết quả cho "${query}"`,
+        };
+      }
+
       // Employee tools (7 tools)
       if (name === 'search_employees_by_name') {
         const result = await this.employeesService.findByName(args.name);
@@ -553,14 +633,26 @@ export class GeminiToolsService {
 
       // Document tools (2 tools)
       if (name === 'get_document_content') {
-        const result = await this.documentsService.getDocumentContent(
-          args.projectId,
-          args.docId,
-        );
+        // Support both project-based and direct document access
+        let result;
+        if (args.projectId) {
+          // Project document
+          result = await this.documentsService.getDocumentContent(
+            args.projectId,
+            args.docId,
+          );
+        } else {
+          // Company document (no project)
+          result = await this.documentsService.getDocumentContentDirect(
+            args.docId,
+          );
+        }
+        
         // Format response: return text content with metadata
-        const contentPreview = result.content.length > 1000
-          ? result.content.substring(0, 1000) + '...(đã cắt bớt)'
-          : result.content;
+        const contentPreview =
+          result.content.length > 1000
+            ? result.content.substring(0, 1000) + '...(đã cắt bớt)'
+            : result.content;
 
         return {
           documentName: result.documentName,
@@ -598,6 +690,7 @@ export class GeminiToolsService {
         if (results.length === 1) {
           // Chỉ 1 kết quả → gợi ý lấy ngay
           const doc = results[0];
+          const hasProject = (doc as any).projectId && (doc as any).projectId !== 'unknown';
           return {
             found: true,
             count: 1,
@@ -606,12 +699,14 @@ export class GeminiToolsService {
               id: doc.id,
               name: doc.name,
               description: doc.mo_ta,
-              projectId: (doc as any).projectId || 'unknown',
+              projectId: (doc as any).projectId || null,
               type: doc.loai,
               hasPath: doc.co_duong_dan,
             },
             message: `Tìm thấy tài liệu: "${doc.name}" (ID: ${doc.id}). Đang lấy nội dung...`,
-            nextAction: `Gọi get_document_content với docId="${doc.id}" và projectId="${(doc as any).projectId}"`,
+            nextAction: hasProject 
+              ? `Gọi get_document_content với docId="${doc.id}" và projectId="${(doc as any).projectId}"`
+              : `Gọi get_document_content với docId="${doc.id}" (company document, không cần projectId)`,
           };
         }
 

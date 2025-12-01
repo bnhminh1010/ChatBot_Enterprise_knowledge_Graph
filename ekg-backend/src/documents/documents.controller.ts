@@ -1,7 +1,23 @@
-import { Controller, Get, Param, UseGuards, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+  Logger,
+  UseInterceptors,
+  UploadedFile,
+  Req,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentsService } from './documents.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { CreateDocumentDto } from './dto/create-document.dto';
+import * as path from 'path';
 
 @Controller('documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -110,5 +126,102 @@ export class DocumentsController {
     );
     const hasPath = await this.docsService.hasValidPath(projectId, docId);
     return { documentId: docId, hasPath };
+  }
+
+  /**
+   * POST /documents/upload
+   * Upload document to S3 and create TaiLieu node
+   */
+  @Post('upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: 200 * 1024 * 1024, // 200MB
+      },
+      fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+          '.pdf',
+          '.docx',
+          '.txt',
+          '.md',
+          '.json',
+          '.xlsx',
+          '.pptx',
+          '.csv',
+        ];
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (!allowedTypes.includes(ext)) {
+          return cb(
+            new BadRequestException(`File type ${ext} not allowed`),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadDocument(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: CreateDocumentDto,
+    @Req() req: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    // Extract userId and departmentId from JWT token
+    const userId = req.user?.id || 'unknown';
+    const departmentId = req.user?.department_id || 'unknown';
+
+    this.logger.log(
+      `Uploading document: ${file.originalname} for user: ${userId}`,
+    );
+
+    return this.docsService.uploadDocument(file, dto, userId, departmentId);
+  }
+
+  /**
+   * GET /documents/projects/:projectId/docs/:docId/download-url
+   * Get pre-signed download URL
+   */
+  @Get('projects/:projectId/docs/:docId/download-url')
+  async getDownloadUrl(
+    @Param('projectId') projectId: string,
+    @Param('docId') docId: string,
+  ) {
+    this.logger.log(`Generating download URL for document ${docId}`);
+    return this.docsService.getDownloadUrl(projectId, docId);
+  }
+
+  /**
+   * DELETE /documents/projects/:projectId/docs/:docId
+   * Delete document from S3 and Neo4j
+   */
+  @Delete('projects/:projectId/docs/:docId')
+  async deleteDocument(
+    @Param('projectId') projectId: string,
+    @Param('docId') docId: string,
+    @Req() req: any,
+  ) {
+    const userId = req.user?.id || 'unknown';
+
+    this.logger.log(`Deleting document ${docId} by user ${userId}`);
+
+    await this.docsService.deleteDocument(projectId, docId, userId);
+
+    return { success: true, message: 'Document deleted successfully' };
+  }
+
+  /**
+   * GET /documents/docs/:docId/content
+   * Get document content by docId only (no project required)
+   * For company-level documents or direct access
+   */
+  @Get('docs/:docId/content')
+  async getDocumentContentDirect(
+    @Param('docId') docId: string,
+  ): Promise<unknown> {
+    this.logger.log(`Fetching document content for ${docId} (direct access)`);
+    return this.docsService.getDocumentContentDirect(docId);
   }
 }

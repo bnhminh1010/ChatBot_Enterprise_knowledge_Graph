@@ -24,7 +24,7 @@ let DepartmentsService = class DepartmentsService {
            id: p.code,
            code: p.code,
            name: p.ten,
-           description: COALESCE(p.description, '')
+           description: COALESCE(p.mo_ta, '')
          } AS dept
          ORDER BY p.ten`);
             return rows.map((r) => r.dept);

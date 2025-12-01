@@ -13,6 +13,7 @@ const gemini_service_1 = require("./gemini.service");
 const query_classifier_service_1 = require("./query-classifier.service");
 const chroma_db_service_1 = require("./chroma-db.service");
 const neo4j_module_1 = require("../core/neo4j/neo4j.module");
+const redis_module_1 = require("../core/redis/redis.module");
 const gemini_tools_service_1 = require("./gemini-tools.service");
 const positions_module_1 = require("../positions/positions.module");
 const technologies_module_1 = require("../technologies/technologies.module");
@@ -20,6 +21,10 @@ const employees_module_1 = require("../employees/employees.module");
 const departments_module_1 = require("../departments/departments.module");
 const projects_module_1 = require("../projects/projects.module");
 const skills_module_1 = require("../skills/skills.module");
+const documents_module_1 = require("../documents/documents.module");
+const agent_planner_service_1 = require("./agent/agent-planner.service");
+const agent_executor_service_1 = require("./agent/agent-executor.service");
+const agent_memory_service_1 = require("./agent/agent-memory.service");
 let AiModule = class AiModule {
 };
 exports.AiModule = AiModule;
@@ -27,12 +32,14 @@ exports.AiModule = AiModule = __decorate([
     (0, common_1.Module)({
         imports: [
             neo4j_module_1.Neo4jModule,
+            redis_module_1.RedisModule,
             positions_module_1.PositionsModule,
             technologies_module_1.TechnologiesModule,
             employees_module_1.EmployeesModule,
             departments_module_1.DepartmentsModule,
             projects_module_1.ProjectsModule,
             skills_module_1.SkillsModule,
+            documents_module_1.DocumentsModule,
         ],
         providers: [
             ollama_service_1.OllamaService,
@@ -40,6 +47,9 @@ exports.AiModule = AiModule = __decorate([
             query_classifier_service_1.QueryClassifierService,
             chroma_db_service_1.ChromaDBService,
             gemini_tools_service_1.GeminiToolsService,
+            agent_planner_service_1.AgentPlannerService,
+            agent_executor_service_1.AgentExecutorService,
+            agent_memory_service_1.AgentMemoryService,
         ],
         exports: [
             ollama_service_1.OllamaService,
@@ -47,6 +57,9 @@ exports.AiModule = AiModule = __decorate([
             query_classifier_service_1.QueryClassifierService,
             chroma_db_service_1.ChromaDBService,
             gemini_tools_service_1.GeminiToolsService,
+            agent_planner_service_1.AgentPlannerService,
+            agent_executor_service_1.AgentExecutorService,
+            agent_memory_service_1.AgentMemoryService,
         ],
     })
 ], AiModule);

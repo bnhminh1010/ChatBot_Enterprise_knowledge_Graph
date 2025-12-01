@@ -17,6 +17,7 @@ exports.ChatController = void 0;
 const common_1 = require("@nestjs/common");
 const chat_service_1 = require("./chat.service");
 const metrics_service_1 = require("./services/metrics.service");
+const chroma_indexing_service_1 = require("./services/chroma-indexing.service");
 const chat_query_dto_1 = require("./dto/chat-query.dto");
 const neo4j_service_1 = require("../core/neo4j/neo4j.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
@@ -26,11 +27,13 @@ const current_user_decorator_1 = require("../auth/decorators/current-user.decora
 let ChatController = ChatController_1 = class ChatController {
     chatService;
     metricsService;
+    chromaIndexingService;
     neo4jService;
     logger = new common_1.Logger(ChatController_1.name);
-    constructor(chatService, metricsService, neo4jService) {
+    constructor(chatService, metricsService, chromaIndexingService, neo4jService) {
         this.chatService = chatService;
         this.metricsService = metricsService;
+        this.chromaIndexingService = chromaIndexingService;
         this.neo4jService = neo4jService;
     }
     async processQuery(dto, user) {
@@ -53,8 +56,8 @@ let ChatController = ChatController_1 = class ChatController {
     }
     async indexEntities() {
         try {
-            await this.chatService.indexEntitiesToChromaDB();
-            return { message: 'Entities indexed successfully to ChromaDB' };
+            const result = await this.chromaIndexingService.indexAll();
+            return result;
         }
         catch (error) {
             this.logger.error(`Error indexing entities: ${error}`);
@@ -79,8 +82,7 @@ let ChatController = ChatController_1 = class ChatController {
             neo4j: neo4jStatus,
             env: envStatus,
         };
-        const allHealthy = neo4jStatus === true &&
-            Object.values(envStatus).every((x) => x === true);
+        const allHealthy = neo4jStatus === true && Object.values(envStatus).every((x) => x === true);
         return {
             status: allHealthy ? 'ok' : 'degraded',
             services,
@@ -124,6 +126,7 @@ exports.ChatController = ChatController = ChatController_1 = __decorate([
     (0, common_1.Controller)('chat'),
     __metadata("design:paramtypes", [chat_service_1.ChatService,
         metrics_service_1.MetricsService,
+        chroma_indexing_service_1.ChromaIndexingService,
         neo4j_service_1.Neo4jService])
 ], ChatController);
 //# sourceMappingURL=chat.controller.js.map
