@@ -335,7 +335,7 @@ export class DocumentsService {
 
   /**
    * Upload document to S3 and create TaiLieu node in Neo4j
-   * S3 key structure: documents/{departmentId}/{userId}/{filename} (NO UUID)
+   * S3 key structure: documents/{filename} (NO UUID)
    */
   async uploadDocument(
     file: Express.Multer.File,
@@ -347,9 +347,9 @@ export class DocumentsService {
       const fileExtension = path.extname(file.originalname);
       const fileName = file.originalname;
 
-      // Generate S3 key: documents/{departmentId}/{userId}/{filename}
+      // Generate S3 key: documents/{filename}
       // NO UUID because S3 Versioning handles duplicates
-      const s3Key = `documents/${departmentId}/${userId}/${fileName}`;
+      const s3Key = `documents/${fileName}`;
 
       this.logger.log(
         `Uploading document: ${fileName} (${(file.size / 1024 / 1024).toFixed(2)}MB) to ${s3Key}`,
