@@ -100,14 +100,14 @@ export default function RegisterPage() {
       {/* Register Card */}
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-linear-to-r from-orange-500 to-amber-500 mb-4 shadow-lg shadow-orange-500/30">
             <span className="text-2xl">✨</span>
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Tạo tài khoản mới
           </h1>
           <p className="text-muted-foreground">
-            Đăng ký để bắt đầu sử dụng KhoaOcBo Chat
+            Đăng ký để sử dụng Bilibily - Enterprise Knowledge Graph
           </p>
         </div>
 
@@ -216,7 +216,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading || formData.password !== formData.confirmPassword}
-              className="w-full py-3 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-xl transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 px-4 bg-linear-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium rounded-xl transition-all shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? "Đang tạo tài khoản..." : "Đăng ký"}
             </button>

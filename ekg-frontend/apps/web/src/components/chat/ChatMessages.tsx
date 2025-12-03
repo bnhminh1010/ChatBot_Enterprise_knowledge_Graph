@@ -32,10 +32,10 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                 message.role === 'user'
-                  ? 'bg-blue-500 text-white rounded-br-none'
-                  : 'bg-gray-100 dark:bg-gray-700 rounded-bl-none'
+                  ? 'bg-linear-to-r from-[#E6775B] to-[#F0A66B] text-white rounded-br-sm shadow-lg shadow-[#E6775B]/20'
+                  : 'bg-card border border-border text-foreground rounded-bl-sm'
               }`}
             >
               <MessageContent content={message.content} role={message.role} />
@@ -51,18 +51,18 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
         {/* Hiển thị khi đang tải */}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl px-4 py-2 rounded-bl-none">
+            <div className="bg-card border border-border rounded-2xl px-4 py-3 rounded-bl-sm">
               <div className="flex space-x-2">
                 <div
-                  className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
+                  className="w-2 h-2 rounded-full bg-[#E6775B] animate-bounce"
                   style={{ animationDelay: '0ms' }}
                 />
                 <div
-                  className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
+                  className="w-2 h-2 rounded-full bg-[#F0A66B] animate-bounce"
                   style={{ animationDelay: '150ms' }}
                 />
                 <div
-                  className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
+                  className="w-2 h-2 rounded-full bg-[#E6775B] animate-bounce"
                   style={{ animationDelay: '300ms' }}
                 />
               </div>

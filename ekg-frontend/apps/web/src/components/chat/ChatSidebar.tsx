@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, MessageSquare, Trash2, Moon, Sun } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { UserInfo } from './UserInfo';
 
 export interface Chat {
@@ -30,7 +29,6 @@ export function ChatSidebar({
   isOpen,
   onClose,
 }: ChatSidebarProps) {
-  const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -55,7 +53,7 @@ export function ChatSidebar({
           <div className="p-3 border-b border-border">
             <button
               onClick={onNewChat}
-              className="w-full flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium transition-colors shadow-sm hover:shadow"
+              className="w-full flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-linear-to-r from-[#E6775B] to-[#F0A66B] hover:brightness-110 text-white font-medium transition-all shadow-lg shadow-[#E6775B]/20 hover:shadow-xl hover:shadow-[#E6775B]/30 hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" />
               <span>New chat</span>
@@ -72,11 +70,13 @@ export function ChatSidebar({
                     if (window.innerWidth < 1024) onClose();
                   }}
                   className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all ${
-                    currentChatId === chat.id ? 'bg-muted/80' : 'hover:bg-muted/50'
+                    currentChatId === chat.id 
+                      ? 'bg-[#2F2F2F] text-primary' 
+                      : 'hover:bg-[#2F2F2F]/50 text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <MessageSquare className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
-                  <span className="flex-1 text-sm truncate text-foreground">
+                  <MessageSquare className="w-4 h-4 flex-shrink-0 opacity-70" />
+                  <span className="flex-1 text-sm truncate font-medium">
                     {chat.title}
                   </span>
                   <button
@@ -94,24 +94,7 @@ export function ChatSidebar({
           </div>
 
           <div className="p-3 border-t border-border space-y-2">
-            {mounted && (
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-foreground"
-              >
-                {theme === 'dark' ? (
-                  <>
-                    <Sun className="w-4 h-4" />
-                    <span className="text-sm">Light mode</span>
-                  </>
-                ) : (
-                  <>
-                    <Moon className="w-4 h-4" />
-                    <span className="text-sm">Dark mode</span>
-                  </>
-                )}
-              </button>
-            )}
+
 
             <UserInfo />
           </div>

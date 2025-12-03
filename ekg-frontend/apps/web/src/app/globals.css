@@ -3,49 +3,68 @@
 @plugin "tailwindcss-animate";
 
 /* Tokens (HSL) */
+/* Tokens (HSL) */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 221 83% 53%;
+  /* Claude-like Specific Dark Theme */
+  --background: 0 0% 12%;   /* #1F1F1F */
+  --foreground: 48 14% 79%; /* #D1CFC1 */
+  
+  --card: 0 0% 15%;         /* Slightly lighter than bg for cards */
+  --card-foreground: 48 14% 79%;
+  
+  --popover: 0 0% 12%;
+  --popover-foreground: 48 14% 79%;
+  
+  --primary: 12 74% 63%;    /* #E6775B */
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 221 83% 53%;
-  --radius: 0.75rem;
-}
-
-.dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 221 83% 53%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
+  
+  --secondary: 0 0% 18%;    /* Slightly lighter for secondary elements */
+  --secondary-foreground: 48 14% 79%;
+  
+  --muted: 0 0% 18%;
+  --muted-foreground: 48 14% 60%;
+  
+  --accent: 0 0% 18%;
+  --accent-foreground: 48 14% 79%;
+  
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 221 83% 53%;
+  
+  --border: 0 0% 25%;
+  --input: 0 0% 25%;
+  --ring: 12 74% 63%;
+  
+  --radius: 0.75rem;
+  
+  /* Gradient colors - derived from #E6775B */
+  --gradient-from: 12 74% 63%;
+  --gradient-to: 25 80% 65%;
+}
+
+/* Enforce same theme for dark mode class */
+.dark {
+  --background: 0 0% 12%;   /* #1F1F1F */
+  --foreground: 48 14% 79%; /* #D1CFC1 */
+  --card: 0 0% 15%;
+  --card-foreground: 48 14% 79%;
+  --popover: 0 0% 12%;
+  --popover-foreground: 48 14% 79%;
+  --primary: 12 74% 63%;    /* #E6775B */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 18%;
+  --secondary-foreground: 48 14% 79%;
+  --muted: 0 0% 18%;
+  --muted-foreground: 48 14% 60%;
+  --accent: 0 0% 18%;
+  --accent-foreground: 48 14% 79%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 25%;
+  --input: 0 0% 25%;
+  --ring: 12 74% 63%;
+  
+  --gradient-from: 12 74% 63%;
+  --gradient-to: 25 80% 65%;
 }
 
 /* Map tokens -> Tailwind v4 colors & radii */
@@ -159,4 +178,31 @@
 
 .animate-bounce:nth-child(3) {
   animation-delay: 300ms;
+}
+  .gradient-text { background: linear-gradient(to right, hsl(var(--gradient-from)), hsl(var(--gradient-to))); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+/* Fade-in animation for messages */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
 }

@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import { useChat } from '@/hooks/use-chat';
 import { useChatHistory } from '@/hooks/use-chat-history';
+import { useAuth } from '@/contexts/auth-context';
 import { ChatSidebar } from './ChatSidebar';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
+import { ChatLanding } from './ChatLanding';
 
 function ErrorMessage({
   error,
@@ -31,6 +33,7 @@ function ErrorMessage({
 
 export default function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { user } = useAuth();
 
   // Use custom hooks
   const {
@@ -75,22 +78,28 @@ export default function Chat() {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="flex items-center h-14 px-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 hover:bg-muted rounded-lg transition-colors"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div className="flex-1 text-center lg:text-left lg:ml-0 ml-2">
-            <h1 className="text-sm font-semibold text-foreground">
-              {currentChat?.title || 'New Chat'}
-            </h1>
-          </div>
-        </div>
+        {messages.length === 0 ? (
+          <ChatLanding onSuggestionClick={handleSendMessage} userName={user?.username || 'Admin'} />
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center h-14 px-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex-1 text-center lg:text-left lg:ml-0 ml-2">
+                <h1 className="text-sm font-semibold text-foreground">
+                  {currentChat?.title || 'New Chat'}
+                </h1>
+              </div>
+            </div>
 
-        <ChatMessages messages={messages} isLoading={isLoading} />
+            <ChatMessages messages={messages} isLoading={isLoading} />
+          </>
+        )}
         <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
 
