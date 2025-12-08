@@ -44,10 +44,13 @@ export declare class DocumentsService {
     hasValidPath(projectId: string, docId: string): Promise<boolean>;
     searchDocumentsByName(documentName: string, projectId?: string): Promise<DocumentResult[]>;
     uploadDocument(file: Express.Multer.File, dto: CreateDocumentDto, userId: string, departmentId: string): Promise<UploadResponseDto>;
+    private createDocumentRelationship;
     getDownloadUrl(projectId: string, docId: string): Promise<{
         url: string;
         expiresIn: number;
     }>;
     deleteDocument(projectId: string, docId: string, userId: string): Promise<void>;
+    getDocumentByIdDirect(docId: string): Promise<DocumentResult>;
+    getDocumentContentDirect(docId: string): Promise<DocumentContent>;
 }
 export {};

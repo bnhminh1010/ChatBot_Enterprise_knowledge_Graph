@@ -17,6 +17,17 @@ const conversation_history_service_1 = require("./services/conversation-history.
 const redis_conversation_service_1 = require("./services/redis-conversation.service");
 const ollama_rag_service_1 = require("./services/ollama-rag.service");
 const chroma_indexing_service_1 = require("./services/chroma-indexing.service");
+const upload_intent_handler_service_1 = require("./services/upload-intent-handler.service");
+const query_analyzer_service_1 = require("./services/query-analyzer.service");
+const query_cache_service_1 = require("./services/query-cache.service");
+const context_cache_service_1 = require("./services/context-cache.service");
+const context_compression_service_1 = require("./services/context-compression.service");
+const user_preference_service_1 = require("./services/user-preference.service");
+const suggested_questions_service_1 = require("./services/suggested-questions.service");
+const database_context_service_1 = require("./services/database-context.service");
+const graph_data_extractor_service_1 = require("./services/graph-data-extractor.service");
+const recommendation_service_1 = require("./services/recommendation.service");
+const scheduler_service_1 = require("./services/scheduler.service");
 const ai_module_1 = require("../ai/ai.module");
 const employees_module_1 = require("../employees/employees.module");
 const skills_module_1 = require("../skills/skills.module");
@@ -37,7 +48,7 @@ exports.ChatModule = ChatModule = __decorate([
             employees_module_1.EmployeesModule,
             skills_module_1.SkillsModule,
             departments_module_1.DepartmentsModule,
-            projects_module_1.ProjectsModule,
+            (0, common_1.forwardRef)(() => projects_module_1.ProjectsModule),
             search_module_1.SearchModule,
             neo4j_module_1.Neo4jModule,
             positions_module_1.PositionsModule,
@@ -53,8 +64,30 @@ exports.ChatModule = ChatModule = __decorate([
             redis_conversation_service_1.RedisConversationService,
             ollama_rag_service_1.OllamaRAGService,
             chroma_indexing_service_1.ChromaIndexingService,
+            upload_intent_handler_service_1.UploadIntentHandlerService,
+            query_analyzer_service_1.QueryAnalyzerService,
+            query_cache_service_1.QueryCacheService,
+            context_cache_service_1.ContextCacheService,
+            context_compression_service_1.ContextCompressionService,
+            user_preference_service_1.UserPreferenceService,
+            suggested_questions_service_1.SuggestedQuestionsService,
+            database_context_service_1.DatabaseContextService,
+            graph_data_extractor_service_1.GraphDataExtractor,
+            recommendation_service_1.RecommendationService,
+            scheduler_service_1.SchedulerService,
         ],
-        exports: [chat_service_1.ChatService],
+        exports: [
+            chat_service_1.ChatService,
+            graph_data_extractor_service_1.GraphDataExtractor,
+            query_cache_service_1.QueryCacheService,
+            query_analyzer_service_1.QueryAnalyzerService,
+            context_compression_service_1.ContextCompressionService,
+            user_preference_service_1.UserPreferenceService,
+            suggested_questions_service_1.SuggestedQuestionsService,
+            database_context_service_1.DatabaseContextService,
+            recommendation_service_1.RecommendationService,
+            scheduler_service_1.SchedulerService,
+        ],
     })
 ], ChatModule);
 //# sourceMappingURL=chat.module.js.map

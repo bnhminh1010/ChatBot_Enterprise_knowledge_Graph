@@ -139,7 +139,7 @@ let ChromaDBService = ChromaDBService_1 = class ChromaDBService {
     }
     async search(collectionName, queryText, topK = 5) {
         try {
-            const collection = this.collections.get(collectionName);
+            const collection = await this.ensureCollectionLoaded(collectionName);
             if (!collection) {
                 throw new Error(`Collection ${collectionName} not found`);
             }
@@ -160,8 +160,93 @@ let ChromaDBService = ChromaDBService_1 = class ChromaDBService {
             throw error;
         }
     }
-    async hybridSearch(collectionName, queryText, topK = 5) {
-        return this.search(collectionName, queryText, topK);
+    async hybridSearch(collectionName, queryText, topK = 5, options) {
+        try {
+            const collection = this.collections.get(collectionName);
+            if (!collection) {
+                throw new Error(`Collection ${collectionName} not found`);
+            }
+            const vectorWeight = options?.vectorWeight ?? 0.7;
+            const keywordWeight = options?.keywordWeight ?? 0.3;
+            const queryEmbedding = await this.ollamaService.generateEmbedding(queryText);
+            const vectorScores = collection.map((vector) => ({
+                id: vector.id,
+                content: vector.content,
+                metadata: vector.metadata,
+                vectorScore: this.cosineSimilarity(queryEmbedding, vector.embedding),
+            }));
+            const queryKeywords = this.extractKeywords(queryText);
+            const keywordScores = vectorScores.map((item) => {
+                const contentKeywords = this.extractKeywords(item.content);
+                const keywordScore = this.calculateKeywordRelevance(queryKeywords, contentKeywords, item.content);
+                return {
+                    ...item,
+                    keywordScore,
+                };
+            });
+            let filtered = keywordScores;
+            if (options?.filters) {
+                filtered = keywordScores.filter((item) => this.matchesFilters(item.metadata, options.filters));
+            }
+            const hybridScores = filtered.map((item) => ({
+                id: item.id,
+                content: item.content,
+                metadata: item.metadata,
+                similarity: vectorWeight * item.vectorScore + keywordWeight * item.keywordScore,
+            }));
+            const sorted = hybridScores
+                .sort((a, b) => b.similarity - a.similarity)
+                .slice(0, topK);
+            this.logger.debug(`Hybrid search in ${collectionName}: ${sorted.length} results (vector: ${vectorWeight}, keyword: ${keywordWeight})`);
+            return sorted;
+        }
+        catch (error) {
+            this.logger.error(`Failed to perform hybrid search in ${collectionName}: ${error}`);
+            return this.search(collectionName, queryText, topK);
+        }
+    }
+    extractKeywords(text) {
+        return text
+            .toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .split(/\s+/)
+            .filter((word) => word.length > 2);
+    }
+    calculateKeywordRelevance(queryKeywords, contentKeywords, content) {
+        if (queryKeywords.length === 0)
+            return 0;
+        let score = 0;
+        const contentLength = contentKeywords.length;
+        for (const qKeyword of queryKeywords) {
+            const tf = contentKeywords.filter((k) => k === qKeyword).length;
+            if (tf > 0) {
+                const normalizedTF = Math.log(1 + tf);
+                const lengthNorm = 1 / Math.sqrt(contentLength || 1);
+                score += normalizedTF * lengthNorm;
+            }
+        }
+        return score / Math.sqrt(queryKeywords.length);
+    }
+    matchesFilters(metadata, filters) {
+        for (const [key, value] of Object.entries(filters)) {
+            if (Array.isArray(value)) {
+                if (!value.includes(metadata[key])) {
+                    return false;
+                }
+            }
+            else {
+                const metaValue = metadata[key];
+                if (typeof value === 'string' && typeof metaValue === 'string') {
+                    if (!metaValue.toLowerCase().includes(value.toLowerCase())) {
+                        return false;
+                    }
+                }
+                else if (metaValue !== value) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
     async clearCollection(collectionName) {
         try {
@@ -208,6 +293,30 @@ let ChromaDBService = ChromaDBService_1 = class ChromaDBService {
             return 0;
         }
         return dotProduct / (normA * normB);
+    }
+    async ensureCollectionLoaded(collectionName) {
+        if (this.collections.has(collectionName)) {
+            return this.collections.get(collectionName);
+        }
+        const lazyLoad = process.env.CHROMADB_LAZY_LOAD === 'true';
+        if (!lazyLoad) {
+            return null;
+        }
+        const filePath = this.collectionFiles.get(collectionName);
+        if (!filePath || !fs.existsSync(filePath)) {
+            return null;
+        }
+        try {
+            this.logger.log(`Lazy loading collection: ${collectionName}`);
+            const data = fs.readFileSync(filePath, 'utf-8');
+            const vectors = JSON.parse(data);
+            this.collections.set(collectionName, vectors);
+            return vectors;
+        }
+        catch (error) {
+            this.logger.warn(`Could not lazy load ${collectionName}: ${error.message}`);
+            return null;
+        }
     }
     getCollection(collectionName) {
         return this.collections.get(collectionName);

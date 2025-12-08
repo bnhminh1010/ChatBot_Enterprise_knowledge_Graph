@@ -29,6 +29,10 @@ export interface AgentResult {
     totalSteps: number;
     executionTime: number;
     error?: string;
+    confidence?: number;
+    reasoning?: string[];
+    warnings?: string[];
+    retrievedDataSources?: string[];
 }
 export interface AgentExecution {
     id: string;

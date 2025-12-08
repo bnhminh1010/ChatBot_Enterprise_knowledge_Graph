@@ -11,12 +11,13 @@ const common_1 = require("@nestjs/common");
 const projects_service_1 = require("./projects.service");
 const projects_controller_1 = require("./projects.controller");
 const neo4j_module_1 = require("../core/neo4j/neo4j.module");
+const chat_module_1 = require("../chat/chat.module");
 let ProjectsModule = class ProjectsModule {
 };
 exports.ProjectsModule = ProjectsModule;
 exports.ProjectsModule = ProjectsModule = __decorate([
     (0, common_1.Module)({
-        imports: [neo4j_module_1.Neo4jModule],
+        imports: [neo4j_module_1.Neo4jModule, (0, common_1.forwardRef)(() => chat_module_1.ChatModule)],
         providers: [projects_service_1.ProjectsService],
         controllers: [projects_controller_1.ProjectsController],
         exports: [projects_service_1.ProjectsService],

@@ -28,10 +28,18 @@ export declare class ChromaDBService implements OnModuleInit {
     private initializeCollections;
     addDocuments(collectionName: string, documents: VectorDocument[]): Promise<void>;
     search(collectionName: string, queryText: string, topK?: number): Promise<SearchResult[]>;
-    hybridSearch(collectionName: string, queryText: string, topK?: number): Promise<SearchResult[]>;
+    hybridSearch(collectionName: string, queryText: string, topK?: number, options?: {
+        vectorWeight?: number;
+        keywordWeight?: number;
+        filters?: Record<string, any>;
+    }): Promise<SearchResult[]>;
+    private extractKeywords;
+    private calculateKeywordRelevance;
+    private matchesFilters;
     clearCollection(collectionName: string): Promise<void>;
     private saveCollection;
     private cosineSimilarity;
+    private ensureCollectionLoaded;
     getCollection(collectionName: string): StoredVector[] | undefined;
     getAllCollections(): string[];
 }

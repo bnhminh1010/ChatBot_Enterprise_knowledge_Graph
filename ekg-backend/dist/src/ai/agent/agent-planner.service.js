@@ -14,16 +14,43 @@ exports.AgentPlannerService = void 0;
 const common_1 = require("@nestjs/common");
 const gemini_service_1 = require("../gemini.service");
 const agent_types_1 = require("./types/agent.types");
+const query_analyzer_service_1 = require("../../chat/services/query-analyzer.service");
+const query_analysis_interface_1 = require("../../core/interfaces/query-analysis.interface");
 let AgentPlannerService = AgentPlannerService_1 = class AgentPlannerService {
     geminiService;
+    queryAnalyzer;
     logger = new common_1.Logger(AgentPlannerService_1.name);
-    constructor(geminiService) {
+    constructor(geminiService, queryAnalyzer) {
         this.geminiService = geminiService;
+        this.queryAnalyzer = queryAnalyzer;
     }
     async createPlan(query, context) {
         this.logger.log(`📋 Creating plan for query: "${query}"`);
         try {
-            const prompt = this.buildPlanningPrompt(query, context);
+            const analysis = await this.queryAnalyzer.analyzeQuery(query, {
+                conversationHistory: context.conversationHistory
+                    .filter((m) => m.role !== 'system')
+                    .map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                })),
+            });
+            this.logger.log(`🔍 Query analysis: ${analysis.mainIntent.type} (confidence: ${analysis.confidence.toFixed(2)}), complexity: ${analysis.complexity.level}`);
+            if (analysis.mainIntent.type === query_analysis_interface_1.IntentType.GREETING ||
+                analysis.mainIntent.type === query_analysis_interface_1.IntentType.GENERAL_KNOWLEDGE) {
+                this.logger.log(`✅ Direct answer mode (${analysis.mainIntent.type})`);
+                const directAnswer = await this.geminiService.generateResponse(query, 'Trả lời ngắn gọn, thân thiện bằng tiếng Việt.');
+                return {
+                    goal: 'Trả lời trực tiếp',
+                    steps: [],
+                    estimatedTokens: 100,
+                    createdAt: new Date(),
+                    needsTools: false,
+                    directAnswer,
+                    queryAnalysis: analysis,
+                };
+            }
+            const prompt = this.buildPlanningPrompt(query, context, analysis);
             const response = await this.geminiService.generateResponse(prompt, this.getPlanningSystemPrompt());
             const parsed = this.parseResponse(response, query);
             if (parsed.needsTools === false && parsed.directAnswer) {
@@ -35,39 +62,52 @@ let AgentPlannerService = AgentPlannerService_1 = class AgentPlannerService {
                     createdAt: new Date(),
                     needsTools: false,
                     directAnswer: parsed.directAnswer,
+                    queryAnalysis: analysis,
                 };
             }
             const plan = this.parsePlanFromResponse(parsed, query);
             this.logger.log(`✅ Plan created with ${plan.steps.length} steps for goal: "${plan.goal}"`);
-            return { ...plan, needsTools: true };
+            return { ...plan, needsTools: true, queryAnalysis: analysis };
         }
         catch (error) {
             this.logger.error(`Failed to create plan: ${error.message}`);
             return this.createFallbackPlan(query, context);
         }
     }
-    buildPlanningPrompt(query, context) {
+    buildPlanningPrompt(query, context, analysis) {
         const toolsList = context.availableTools
             .map((t) => `- ${t.name}: ${t.description}\n  Parameters: ${JSON.stringify(t.parameters.properties)}`)
             .join('\n\n');
         const conversationContext = context.conversationHistory.length > 0
             ? `\n\nConversation History (last ${context.conversationHistory.length} messages):\n${context.conversationHistory.map((m) => `${m.role}: ${m.content}`).join('\n')}`
             : '';
+        const analysisContext = analysis
+            ? `
+
+QUERY ANALYSIS (pre-processed):
+- Main Intent: ${analysis.mainIntent.type} (confidence: ${analysis.mainIntent.confidence.toFixed(2)})
+- Complexity: ${analysis.complexity.level} (score: ${analysis.complexity.score})
+- Entities Detected: ${analysis.entities.map((e) => `${e.type}=${e.value}`).join(', ') || 'none'}
+- Suggested Tools: ${analysis.suggestedTools.join(', ') || 'auto-detect'}
+${analysis.ambiguities && analysis.ambiguities.length > 0 ? `- Ambiguities: ${analysis.ambiguities.join(', ')}` : ''}
+`
+            : '';
         return `
-Phân tích user query sau và quyết định cách xử lý:
+Phân tích user query sau và tạo execution plan:
 
 USER QUERY: "${query}"
 ${conversationContext}
+${analysisContext}
 
 AVAILABLE TOOLS:
 ${toolsList}
 
-⚠️ DECISION FIRST - CÓ CẦN TOOLS KHÔNG?
+⚠️ DECISION - CẦN TOOLS KHÔNG?
 
 **KHÔNG CẦN TOOLS** (trả lời trực tiếp) nếu:
 1. Greetings: "xin chào", "hello", "chào bạn", "hi"
 2. Thanks: "cảm ơn", "thank you", "thanks"
-3. General knowledge: "React là g㧔", "Lập trình là gì?"
+3. General knowledge: "React là gì?", "Lập trình là gì?"
 4. Casual chat: không liên quan đến data công ty
 
 **CẦN TOOLS** nếu:
@@ -211,6 +251,7 @@ LUÔN trả về JSON, KHÔNG thêm markdown backticks.
 exports.AgentPlannerService = AgentPlannerService;
 exports.AgentPlannerService = AgentPlannerService = AgentPlannerService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [gemini_service_1.GeminiService])
+    __metadata("design:paramtypes", [gemini_service_1.GeminiService,
+        query_analyzer_service_1.QueryAnalyzerService])
 ], AgentPlannerService);
 //# sourceMappingURL=agent-planner.service.js.map

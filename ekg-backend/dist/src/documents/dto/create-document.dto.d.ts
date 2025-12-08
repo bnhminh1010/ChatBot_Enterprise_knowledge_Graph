@@ -1,6 +1,14 @@
+export declare enum TargetType {
+    DuAn = "DuAn",
+    PhongBan = "PhongBan",
+    CongTy = "CongTy",
+    NhanSu = "NhanSu"
+}
 export declare class CreateDocumentDto {
-    projectId: string;
     ten: string;
+    targetType?: TargetType;
+    targetId?: string;
+    projectId?: string;
     mo_ta?: string;
     tag?: string[];
     version?: string;
@@ -14,4 +22,6 @@ export declare class UploadResponseDto {
     loai_file: string;
     created_at: string;
     download_url: string;
+    targetType?: string;
+    targetId?: string;
 }

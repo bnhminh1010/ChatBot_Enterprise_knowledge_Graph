@@ -2,69 +2,61 @@
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-animate";
 
-/* Tokens (HSL) */
-/* Tokens (HSL) */
+/* Zen Browser Style - Clean, Minimal, Calm */
 :root {
-  /* Claude-like Specific Dark Theme */
-  --background: 0 0% 12%;   /* #1F1F1F */
-  --foreground: 48 14% 79%; /* #D1CFC1 */
+  /* Dark theme with warm undertones */
+  --background: 0 0% 10%;     /* #1a1a1a */
+  --foreground: 45 10% 80%;   /* Warm off-white */
   
-  --card: 0 0% 15%;         /* Slightly lighter than bg for cards */
-  --card-foreground: 48 14% 79%;
+  --card: 0 0% 13%;           /* Slightly lighter for cards */
+  --card-foreground: 45 10% 80%;
   
-  --popover: 0 0% 12%;
-  --popover-foreground: 48 14% 79%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 45 10% 80%;
   
-  --primary: 12 74% 63%;    /* #E6775B */
+  --primary: 12 74% 63%;      /* #E6775B - Coral accent */
   --primary-foreground: 0 0% 100%;
   
-  --secondary: 0 0% 18%;    /* Slightly lighter for secondary elements */
-  --secondary-foreground: 48 14% 79%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 45 10% 80%;
   
-  --muted: 0 0% 18%;
-  --muted-foreground: 48 14% 60%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 55%;
   
-  --accent: 0 0% 18%;
-  --accent-foreground: 48 14% 79%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 45 10% 80%;
   
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
   
-  --border: 0 0% 25%;
-  --input: 0 0% 25%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
   --ring: 12 74% 63%;
   
-  --radius: 0.75rem;
-  
-  /* Gradient colors - derived from #E6775B */
-  --gradient-from: 12 74% 63%;
-  --gradient-to: 25 80% 65%;
+  --radius: 0.5rem;
 }
 
 /* Enforce same theme for dark mode class */
 .dark {
-  --background: 0 0% 12%;   /* #1F1F1F */
-  --foreground: 48 14% 79%; /* #D1CFC1 */
-  --card: 0 0% 15%;
-  --card-foreground: 48 14% 79%;
-  --popover: 0 0% 12%;
-  --popover-foreground: 48 14% 79%;
-  --primary: 12 74% 63%;    /* #E6775B */
+  --background: 0 0% 10%;
+  --foreground: 45 10% 80%;
+  --card: 0 0% 13%;
+  --card-foreground: 45 10% 80%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 45 10% 80%;
+  --primary: 12 74% 63%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 18%;
-  --secondary-foreground: 48 14% 79%;
-  --muted: 0 0% 18%;
-  --muted-foreground: 48 14% 60%;
-  --accent: 0 0% 18%;
-  --accent-foreground: 48 14% 79%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 45 10% 80%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 55%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 45 10% 80%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 25%;
-  --input: 0 0% 25%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
   --ring: 12 74% 63%;
-  
-  --gradient-from: 12 74% 63%;
-  --gradient-to: 25 80% 65%;
 }
 
 /* Map tokens -> Tailwind v4 colors & radii */
@@ -127,10 +119,10 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - Minimal */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -138,71 +130,36 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 4px;
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--muted-foreground) / 0.3);
 }
 
-/* Smooth transitions */
+/* Minimal transitions - Zen style: subtle, not distracting */
 * {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-property: color, background-color, border-color;
+  transition-timing-function: ease-out;
   transition-duration: 150ms;
 }
-@keyframes bounce {
 
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-5px);
-  }
+/* Simple text highlight for primary color */
+.gradient-text { 
+  color: hsl(var(--primary)); 
 }
 
-.animate-bounce {
-  animation: bounce 1s infinite;
-}
-
-.animate-bounce:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.animate-bounce:nth-child(2) {
-  animation-delay: 150ms;
-}
-
-.animate-bounce:nth-child(3) {
-  animation-delay: 300ms;
-}
-  .gradient-text { background: linear-gradient(to right, hsl(var(--gradient-from)), hsl(var(--gradient-to))); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-
-/* Fade-in animation for messages */
+/* Simple fade-in animation */
 @keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+  from { 
+    opacity: 0; 
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  to { 
+    opacity: 1; 
   }
 }
 
 .animate-fade-in {
-  animation: fade-in 0.3s ease-out forwards;
-}
-
-/* Fade in animation */
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
+  animation: fade-in 0.2s ease-out;
 }

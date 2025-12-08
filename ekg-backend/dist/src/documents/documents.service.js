@@ -253,13 +253,12 @@ let DocumentsService = DocumentsService_1 = class DocumentsService {
         try {
             const fileExtension = path.extname(file.originalname);
             const fileName = file.originalname;
-            const s3Key = `documents/${departmentId}/${userId}/${fileName}`;
+            const s3Key = `documents/${fileName}`;
             this.logger.log(`Uploading document: ${fileName} (${(file.size / 1024 / 1024).toFixed(2)}MB) to ${s3Key}`);
             const uploadResult = await this.s3Service.uploadFile(file.buffer, s3Key, file.mimetype);
             const docId = (0, uuid_1.v4)();
             const now = new Date().toISOString();
             await this.neo.run(`
-        MATCH (p:DuAn {id: $projectId})
         CREATE (doc:TaiLieu {
           id: $docId,
           ten: $ten,
@@ -273,10 +272,8 @@ let DocumentsService = DocumentsService_1 = class DocumentsService {
           department_id: $departmentId,
           created_at: datetime($createdAt)
         })
-        CREATE (p)-[:DINH_KEM_TAI_LIEU]->(doc)
         RETURN doc
         `, {
-                projectId: dto.projectId,
                 docId,
                 ten: dto.ten,
                 s3Key: uploadResult.key,
@@ -289,6 +286,20 @@ let DocumentsService = DocumentsService_1 = class DocumentsService {
                 departmentId,
                 createdAt: now,
             });
+            let finalTargetType = dto.targetType;
+            let finalTargetId = dto.targetId;
+            if (!finalTargetType && dto.projectId) {
+                finalTargetType = 'DuAn';
+                finalTargetId = dto.projectId;
+            }
+            if (finalTargetType && finalTargetId) {
+                await this.createDocumentRelationship(finalTargetType, finalTargetId, docId);
+            }
+            await this.neo.run(`
+        MATCH (user:NhanSu {id: $userId})
+        MATCH (doc:TaiLieu {id: $docId})
+        CREATE (user)-[:UPLOAD {uploaded_at: datetime()}]->(doc)
+        `, { userId, docId });
             const downloadUrl = await this.s3Service.getSignedUrl(uploadResult.key);
             this.logger.log(`Document uploaded successfully: ${docId}`);
             return {
@@ -300,11 +311,37 @@ let DocumentsService = DocumentsService_1 = class DocumentsService {
                 loai_file: fileExtension.replace('.', ''),
                 created_at: now,
                 download_url: downloadUrl,
+                targetType: finalTargetType,
+                targetId: finalTargetId,
             };
         }
         catch (error) {
             this.logger.error(`Failed to upload document: ${error}`);
             throw new common_1.ServiceUnavailableException(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+    async createDocumentRelationship(targetType, targetId, docId) {
+        const relationshipMap = {
+            DuAn: 'DINH_KEM_TAI_LIEU',
+            PhongBan: 'TAI_LIEU_PHONG_BAN',
+            CongTy: 'TAI_LIEU_CONG_TY',
+            NhanSu: 'TAI_LIEU_CA_NHAN',
+        };
+        const relType = relationshipMap[targetType];
+        if (!relType) {
+            this.logger.warn(`Unknown target type: ${targetType}. Skipping relationship creation.`);
+            return;
+        }
+        try {
+            await this.neo.run(`
+        MATCH (target:${targetType} {id: $targetId})
+        MATCH (doc:TaiLieu {id: $docId})
+        MERGE (target)-[:${relType}]->(doc)
+        `, { targetId, docId });
+            this.logger.log(`Created relationship: (${targetType} {id: ${targetId}})-[:${relType}]->(TaiLieu {id: ${docId}})`);
+        }
+        catch (error) {
+            this.logger.error(`Failed to create relationship to ${targetType}: ${error}`);
         }
     }
     async getDownloadUrl(projectId, docId) {
@@ -344,6 +381,74 @@ let DocumentsService = DocumentsService_1 = class DocumentsService {
                 throw error;
             this.logger.error(`Failed to delete document: ${error}`);
             throw new common_1.ServiceUnavailableException('Failed to delete document');
+        }
+    }
+    async getDocumentByIdDirect(docId) {
+        try {
+            const rows = await this.neo.run(`MATCH (doc:TaiLieu {id: $docId})
+         RETURN {
+           id: doc.id,
+           name: doc.ten,
+           duong_dan: doc.duong_dan,
+           s3_key: doc.s3_key,
+           s3_bucket: doc.s3_bucket,
+           loai: COALESCE(doc.loai_file, 'unknown'),
+           mo_ta: COALESCE(doc.mo_ta, ''),
+           ngay_tao: COALESCE(toString(doc.created_at), ''),
+           co_duong_dan: doc.duong_dan IS NOT NULL OR doc.s3_key IS NOT NULL,
+           file_size: doc.file_size
+         } AS doc`, { docId });
+            if (!rows[0]) {
+                throw new common_1.NotFoundException(`Document ${docId} not found`);
+            }
+            const firstRow = rows[0];
+            return firstRow?.doc;
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            this.logger.error(`Error getting document: ${error}`);
+            throw new common_1.ServiceUnavailableException('Failed to retrieve document');
+        }
+    }
+    async getDocumentContentDirect(docId) {
+        try {
+            const doc = await this.getDocumentByIdDirect(docId);
+            let result;
+            let sourceUrl;
+            if (doc.s3_key) {
+                this.logger.log(`[Direct] Reading document from S3: ${doc.s3_key}`);
+                result = await this.documentReader.readDocumentFromS3(doc.s3_key, doc.s3_bucket || process.env.AWS_S3_BUCKET || 'ekg-documents', doc.name);
+                sourceUrl = `s3://${doc.s3_bucket}/${doc.s3_key}`;
+            }
+            else if (doc.duong_dan) {
+                this.logger.log(`[Direct] Reading document from URL: ${doc.duong_dan}`);
+                result = await this.documentReader.readDocumentFromUrl(doc.duong_dan);
+                sourceUrl = doc.duong_dan;
+            }
+            else {
+                throw new common_1.NotFoundException('Document has no storage location');
+            }
+            return {
+                documentId: doc?.id || '',
+                documentName: doc?.name || '',
+                documentType: doc?.loai || '',
+                description: doc?.mo_ta || '',
+                sourceUrl,
+                fileInfo: {
+                    type: result.fileType,
+                    fileName: result.fileName,
+                    size: result.size,
+                },
+                content: result.content,
+                retrievedAt: new Date().toISOString(),
+            };
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            this.logger.error(`Error reading document content (direct): ${error}`);
+            throw new common_1.ServiceUnavailableException(`Failed to read document: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 };

@@ -45,7 +45,7 @@ export function ChatInput({ onSendMessage, isLoading = false }: ChatInputProps) 
             onKeyDown={handleKeyDown}
             placeholder="Ask me anything..."
             rows={1}
-            className="w-full resize-none rounded-2xl border border-border bg-card px-5 py-4 pr-14 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#E6775B]/20 focus:border-[#E6775B]/50 transition-all shadow-sm hover:shadow-md"
+            className="w-full resize-none rounded-2xl border border-border bg-card px-5 py-4 pr-14 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
             style={{ minHeight: '60px', maxHeight: '200px' }}
           />
           <button
@@ -54,7 +54,7 @@ export function ChatInput({ onSendMessage, isLoading = false }: ChatInputProps) 
             className={`absolute right-3 bottom-3 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
               !message.trim() || isLoading
                 ? 'bg-muted cursor-not-allowed'
-                : 'bg-linear-to-r from-[#E6775B] to-[#F0A66B] hover:brightness-110 shadow-lg shadow-[#E6775B]/30 hover:scale-105'
+                : 'bg-primary hover:bg-primary/90'
             }`}
           >
             {isLoading ? (

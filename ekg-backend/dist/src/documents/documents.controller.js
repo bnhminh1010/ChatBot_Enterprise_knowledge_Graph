@@ -50,8 +50,6 @@ exports.DocumentsController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
 const documents_service_1 = require("./documents.service");
-const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
-const roles_guard_1 = require("../auth/guards/roles.guard");
 const create_document_dto_1 = require("./dto/create-document.dto");
 const path = __importStar(require("path"));
 let DocumentsController = DocumentsController_1 = class DocumentsController {
@@ -89,9 +87,12 @@ let DocumentsController = DocumentsController_1 = class DocumentsController {
         if (!file) {
             throw new common_1.BadRequestException('No file provided');
         }
+        if (!dto.targetType && !dto.targetId && !dto.projectId) {
+            throw new common_1.BadRequestException('Must provide either (targetType + targetId) OR projectId');
+        }
         const userId = req.user?.id || 'unknown';
         const departmentId = req.user?.department_id || 'unknown';
-        this.logger.log(`Uploading document: ${file.originalname} for user: ${userId}`);
+        this.logger.log(`Uploading: ${file.originalname} for ${dto.targetType || 'DuAn'}:${dto.targetId || dto.projectId}`);
         return this.docsService.uploadDocument(file, dto, userId, departmentId);
     }
     async getDownloadUrl(projectId, docId) {
@@ -103,6 +104,10 @@ let DocumentsController = DocumentsController_1 = class DocumentsController {
         this.logger.log(`Deleting document ${docId} by user ${userId}`);
         await this.docsService.deleteDocument(projectId, docId, userId);
         return { success: true, message: 'Document deleted successfully' };
+    }
+    async getDocumentContentDirect(docId) {
+        this.logger.log(`Fetching document content for ${docId} (direct access)`);
+        return this.docsService.getDocumentContentDirect(docId);
     }
 };
 exports.DocumentsController = DocumentsController;
@@ -200,9 +205,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", Promise)
 ], DocumentsController.prototype, "deleteDocument", null);
+__decorate([
+    (0, common_1.Get)('docs/:docId/content'),
+    __param(0, (0, common_1.Param)('docId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], DocumentsController.prototype, "getDocumentContentDirect", null);
 exports.DocumentsController = DocumentsController = DocumentsController_1 = __decorate([
     (0, common_1.Controller)('documents'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [documents_service_1.DocumentsService])
 ], DocumentsController);
 //# sourceMappingURL=documents.controller.js.map

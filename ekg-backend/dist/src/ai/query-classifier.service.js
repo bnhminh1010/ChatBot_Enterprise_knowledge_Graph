@@ -10,15 +10,9 @@ exports.QueryClassifierService = void 0;
 const common_1 = require("@nestjs/common");
 let QueryClassifierService = class QueryClassifierService {
     simplePatterns = {
-        'list-all': [
-            /^(danh sách|list|tất cả|all)/i,
-        ],
-        'get-by-id': [
-            /^(mã|id|code)\s*:?\s*[A-Z0-9]+/i,
-        ],
-        'count-simple': [
-            /^(bao nhiêu|how many|số lượng)/i,
-        ],
+        'list-all': [/^(danh sách|list|tất cả|all)/i],
+        'get-by-id': [/^(mã|id|code)\s*:?\s*[A-Z0-9]+/i],
+        'count-simple': [/^(bao nhiêu|how many|số lượng)/i],
     };
     mediumPatterns = {
         'semantic-search': [
@@ -61,14 +55,14 @@ let QueryClassifierService = class QueryClassifierService {
         ],
     };
     complexPatterns = {
-        'analysis': [
+        analysis: [
             /phân tích.*(khả năng|hiệu quả|tình hình)/i,
             /đánh giá.*(performance|năng lực)/i,
             /insight|xu hướng|trend/i,
             /vì sao|tại sao.*và/i,
             /nguyên nhân.*là gì/i,
         ],
-        'recommendation': [
+        recommendation: [
             /đề xuất.*(kế hoạch|chiến lược|training)/i,
             /nên.*(thuê|tuyển|sa thải)/i,
             /recommend|suggest/i,
@@ -97,9 +91,12 @@ let QueryClassifierService = class QueryClassifierService {
         const simpleScore = this.calculateSimpleScore(lower);
         const mediumScore = this.calculateMediumScore(lower);
         const complexScore = this.calculateComplexScore(lower);
-        const scores = { simple: simpleScore, medium: mediumScore, complex: complexScore };
-        const level = Object.keys(scores)
-            .reduce((a, b) => scores[a] > scores[b] ? a : b);
+        const scores = {
+            simple: simpleScore,
+            medium: mediumScore,
+            complex: complexScore,
+        };
+        const level = Object.keys(scores).reduce((a, b) => (scores[a] > scores[b] ? a : b));
         const result = this.getQueryDetails(message, lower, level);
         return {
             ...result,
@@ -119,7 +116,7 @@ let QueryClassifierService = class QueryClassifierService {
             score += 0.9;
         }
         for (const patterns of Object.values(this.simplePatterns)) {
-            if (patterns.some(p => p.test(query))) {
+            if (patterns.some((p) => p.test(query))) {
                 score += 0.3;
             }
         }
@@ -140,7 +137,7 @@ let QueryClassifierService = class QueryClassifierService {
             score += 0.6;
         }
         for (const patterns of Object.values(this.mediumPatterns)) {
-            if (patterns.some(p => p.test(query))) {
+            if (patterns.some((p) => p.test(query))) {
                 score += 0.4;
             }
         }
@@ -165,7 +162,7 @@ let QueryClassifierService = class QueryClassifierService {
         if (/nếu.*thì/i.test(query))
             score += 0.6;
         for (const patterns of Object.values(this.complexPatterns)) {
-            if (patterns.some(p => p.test(query))) {
+            if (patterns.some((p) => p.test(query))) {
                 score += 0.5;
             }
         }

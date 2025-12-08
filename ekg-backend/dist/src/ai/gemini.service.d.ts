@@ -1,9 +1,12 @@
 export declare class GeminiService {
     private readonly logger;
+    private readonly DEFAULT_MODEL;
     private client;
     private model;
+    private activeModelName;
     constructor();
     generateResponse(prompt: string, context?: string): Promise<string>;
+    classifyQuery(prompt: string): Promise<string>;
     generateResponseWithHistory(currentMessage: string, conversationHistory: Array<{
         role: 'user' | 'assistant';
         content: string;

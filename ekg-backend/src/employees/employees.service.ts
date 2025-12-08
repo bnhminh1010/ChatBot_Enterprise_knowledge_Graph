@@ -7,12 +7,16 @@ import {
 } from '@nestjs/common';
 import neo4j from 'neo4j-driver';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
+import { GraphDataExtractor } from '../chat/services/graph-data-extractor.service';
 
 @Injectable()
 export class EmployeesService {
   private readonly logger = new Logger(EmployeesService.name);
 
-  constructor(private neo: Neo4jService) {}
+  constructor(
+    private neo: Neo4jService,
+    private graphExtractor: GraphDataExtractor, // Simple injection, no forwardRef!
+  ) {}
 
   async list(skip = 0, limit = 20) {
     try {
@@ -179,27 +183,53 @@ export class EmployeesService {
 
   /**
    * NEW: Find employees by skill
+   * NOW WITH GRAPH DATA!
    */
   async findBySkill(skillName: string, skip = 0, limit = 50) {
     try {
-      const rows = await this.neo.run(
-        `MATCH (e:NhanSu)-[r:CO_KY_NANG]->(k:KyNang)
+      // Use runRaw to get actual Neo4j records
+      const result = await this.neo.runRaw(
+        `MATCH (k:KyNang)
          WHERE toLower(k.ten) CONTAINS toLower($skillName)
+         MATCH (e:NhanSu)-[r:CO_KY_NANG]->(k)
          OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e)
-         WITH e, pb, collect({name:k.ten, level:r.level}) AS skills
-         RETURN {
-           id: e.empId,
-           empId: e.empId,
-           name: e.ten,
-           position: e.chucDanh,
-           department: COALESCE(pb.ten, 'N/A'),
-           skills: skills
-         } AS emp
+         RETURN e, k, pb, r
          ORDER BY e.ten
          SKIP $skip LIMIT $limit`,
         { skillName, skip: neo4j.int(skip), limit: neo4j.int(limit) },
       );
-      return rows.map((r) => r.emp);
+
+      const records = result.records;
+
+      // Extract employees for response
+      const employees = records.map((record) => {
+        const emp = record.get('e');
+        const dept = record.get('pb');
+        const skill = record.get('k');
+        const rel = record.get('r');
+
+        return {
+          id: emp.properties.empId || emp.properties.id,
+          empId: emp.properties.empId || emp.properties.id,
+          name: emp.properties.ten || emp.properties.ho_ten,
+          position: emp.properties.chucDanh,
+          department: dept?.properties?.ten || 'N/A',
+          skills: [
+            { name: skill.properties.ten, level: rel?.properties?.level },
+          ],
+        };
+      });
+
+      // Extract graph data
+      let graphData: any = null;
+      if (this.graphExtractor.shouldGenerateGraph(records)) {
+        graphData = this.graphExtractor.extractGraphData(records);
+        this.logger.debug(
+          `Extracted graph: ${graphData.nodes.length} nodes, ${graphData.links.length} links`,
+        );
+      }
+
+      return { employees, graphData };
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : 'Database connection error';
@@ -534,9 +564,7 @@ export class EmployeesService {
 
       // 4. Position
       if (criteria.position) {
-        whereClauses.push(
-          'toLower(e.chucDanh) CONTAINS toLower($position)',
-        );
+        whereClauses.push('toLower(e.chucDanh) CONTAINS toLower($position)');
         params.position = criteria.position;
       }
 

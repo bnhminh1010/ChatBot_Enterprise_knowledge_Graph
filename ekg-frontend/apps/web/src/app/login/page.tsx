@@ -26,7 +26,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/'); // Redirect to chat page
+      router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đăng nhập thất bại');
     } finally {
@@ -37,8 +37,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
-        {/* Card */}
-        <div className="bg-card border border-border rounded-2xl shadow-2xl">
+        {/* Card - Zen style: no shadow, clean border */}
+        <div className="bg-card border border-border rounded-xl">
           {/* Header */}
           <div className="p-6 space-y-1 border-b border-border">
             <h2 className="text-2xl font-bold text-center text-foreground">
@@ -54,7 +54,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email */}
               <div className="space-y-2">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-200">
+                <label htmlFor="email" className="block text-sm font-medium text-foreground">
                   Email
                 </label>
                 <input
@@ -64,14 +64,14 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/50 transition-all"
+                  className="w-full px-4 py-3 rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                   disabled={loading}
                 />
               </div>
 
               {/* Password */}
               <div className="space-y-2">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-200">
+                <label htmlFor="password" className="block text-sm font-medium text-foreground">
                   Mật khẩu
                 </label>
                 <input
@@ -81,23 +81,23 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/50 transition-all"
+                  className="w-full px-4 py-3 rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                   disabled={loading}
                 />
               </div>
 
               {/* Error */}
               {error && (
-                <div className="flex items-center gap-2 text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-xl p-3">
+                <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <p>{error}</p>
                 </div>
               )}
 
-              {/* Submit Button */}
+              {/* Submit Button - Zen style: solid color, no gradient/shadow */}
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-linear-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium rounded-xl transition-all shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={loading}
               >
                 {loading ? (
@@ -112,11 +112,11 @@ export default function LoginPage() {
             </form>
 
             {/* Demo Credentials */}
-            <div className="mt-6 text-center text-sm text-gray-400">
+            <div className="mt-6 text-center text-sm text-muted-foreground">
               <p className="mb-2">Tài khoản demo:</p>
               <div className="space-y-1 text-xs">
-                <p>Admin: <span className="text-gray-300 font-mono">admin@company.com / Admin@123</span></p>
-                <p>User: <span className="text-gray-300 font-mono">user@company.com / User@123</span></p>
+                <p>Admin: <span className="text-foreground font-mono">admin@company.com / Admin@123</span></p>
+                <p>User: <span className="text-foreground font-mono">user@company.com / User@123</span></p>
               </div>
             </div>
           </div>

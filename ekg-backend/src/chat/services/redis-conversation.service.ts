@@ -50,7 +50,10 @@ export class RedisConversationService {
   /**
    * Create new conversation or get existing
    */
-  async getOrCreateConversation(userId: string, conversationId?: string): Promise<string> {
+  async getOrCreateConversation(
+    userId: string,
+    conversationId?: string,
+  ): Promise<string> {
     if (conversationId) {
       const exists = await this.redis.exists(`conversation:${conversationId}`);
       if (exists) {
@@ -71,7 +74,7 @@ export class RedisConversationService {
     await this.redis.setex(
       `conversation:${newId}`,
       this.TTL_SECONDS,
-      JSON.stringify(conversation)
+      JSON.stringify(conversation),
     );
 
     // Index by user
@@ -88,19 +91,19 @@ export class RedisConversationService {
     conversationId: string,
     role: 'user' | 'assistant',
     content: string,
-    metadata?: any
+    metadata?: any,
   ): Promise<void> {
     try {
       const key = `conversation:${conversationId}`;
       const data = await this.redis.get(key);
-      
+
       if (!data) {
         this.logger.warn(`Conversation ${conversationId} not found`);
         return;
       }
 
       const conversation: Conversation = JSON.parse(data);
-      
+
       const message: ConversationMessage = {
         role,
         content,
@@ -120,10 +123,12 @@ export class RedisConversationService {
       await this.redis.setex(
         key,
         this.TTL_SECONDS,
-        JSON.stringify(conversation)
+        JSON.stringify(conversation),
       );
 
-      this.logger.debug(`Added ${role} message to conversation ${conversationId}`);
+      this.logger.debug(
+        `Added ${role} message to conversation ${conversationId}`,
+      );
     } catch (error) {
       this.logger.error(`Failed to add message: ${error}`);
     }
@@ -134,17 +139,17 @@ export class RedisConversationService {
    */
   async getConversationContext(
     conversationId: string,
-    maxMessages: number = 10
+    maxMessages: number = 10,
   ): Promise<ConversationMessage[]> {
     try {
       const data = await this.redis.get(`conversation:${conversationId}`);
-      
+
       if (!data) {
         return [];
       }
 
       const conversation: Conversation = JSON.parse(data);
-      
+
       // Return last N messages
       return conversation.messages.slice(-maxMessages);
     } catch (error) {
@@ -169,10 +174,15 @@ export class RedisConversationService {
   /**
    * Get user's conversations
    */
-  async getUserConversations(userId: string, limit: number = 20): Promise<Conversation[]> {
+  async getUserConversations(
+    userId: string,
+    limit: number = 20,
+  ): Promise<Conversation[]> {
     try {
-      const conversationIds = await this.redis.smembers(`user:${userId}:conversations`);
-      
+      const conversationIds = await this.redis.smembers(
+        `user:${userId}:conversations`,
+      );
+
       const conversations: Conversation[] = [];
       for (const id of conversationIds.slice(0, limit)) {
         const conv = await this.getConversation(id);
@@ -197,7 +207,10 @@ export class RedisConversationService {
       const conv = await this.getConversation(conversationId);
       if (conv) {
         await this.redis.del(`conversation:${conversationId}`);
-        await this.redis.srem(`user:${conv.userId}:conversations`, conversationId);
+        await this.redis.srem(
+          `user:${conv.userId}:conversations`,
+          conversationId,
+        );
         this.logger.log(`Deleted conversation ${conversationId}`);
       }
     } catch (error) {

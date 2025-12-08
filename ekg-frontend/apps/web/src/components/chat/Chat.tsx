@@ -43,6 +43,7 @@ export default function Chat() {
     selectChat,
     deleteChat,
     updateChatTitle,
+    setCurrentChatId,
   } = useChatHistory();
 
   const {
@@ -51,7 +52,15 @@ export default function Chat() {
     error,
     sendMessage,
     retryLastMessage,
-  } = useChat();
+  } = useChat({ 
+    conversationId: currentChatId || undefined,
+    // Sync conversationId from backend when it returns a new/existing ID
+    onMessageSent: (backendConversationId) => {
+      if (backendConversationId && backendConversationId !== currentChatId) {
+        setCurrentChatId(backendConversationId);
+      }
+    }
+  });
 
   const handleSendMessage = (content: string) => {
     sendMessage(content);
@@ -97,7 +106,11 @@ export default function Chat() {
               </div>
             </div>
 
-            <ChatMessages messages={messages} isLoading={isLoading} />
+            <ChatMessages 
+              messages={messages} 
+              isLoading={isLoading} 
+              onSuggestionClick={handleSendMessage}
+            />
           </>
         )}
         <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />

@@ -2,12 +2,20 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
+  Logger,
 } from '@nestjs/common';
 import { Neo4jService } from '../core/neo4j/neo4j.service';
+import { GraphDataExtractor } from '../chat/services/graph-data-extractor.service';
+import * as neo4j from 'neo4j-driver';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private neo: Neo4jService) {}
+  private readonly logger = new Logger(ProjectsService.name);
+
+  constructor(
+    private neo: Neo4jService,
+    private graphExtractor: GraphDataExtractor,
+  ) {}
 
   async list() {
     try {
@@ -216,6 +224,112 @@ export class ProjectsService {
       return rows.map((r) => r.prj);
     } catch (e) {
       throw new ServiceUnavailableException('Database connection error');
+    }
+  }
+
+  /**
+   * TOOL: search_projects_by_name
+   * Tìm dự án theo tên - hỗ trợ fuzzy matching cho natural language queries
+   * NOW WITH GRAPH DATA for visualization!
+   */
+  async searchByName(name: string, skip = 0, limit = 20) {
+    try {
+      // Use runRaw to get actual Neo4j records for graph extraction
+      const result = await this.neo.runRaw(
+        `MATCH (p:DuAn)
+         WHERE toLower(p.ten) CONTAINS toLower($name) OR toLower(p.ma) CONTAINS toLower($name)
+         OPTIONAL MATCH (p)-[r1:SU_DUNG_CONG_NGHE]->(tech:CongNghe)
+         OPTIONAL MATCH (e:NhanSu)-[r2:LAM_DU_AN]->(p)
+         OPTIONAL MATCH (pb:PhongBan)-[r3:CO_NHAN_SU]-(e)
+         RETURN p, tech, e, pb, r1, r2, r3
+         ORDER BY p.ten
+         SKIP $skip LIMIT $limit`,
+        { name, skip: neo4j.int(skip), limit: neo4j.int(limit) },
+      );
+
+      const records = result.records;
+
+      // DEBUG: Check what we got from Neo4j
+      this.logger.debug(`Got ${records.length} records from Neo4j`);
+
+      // Count non-null relationships
+      let r1Count = 0,
+        r2Count = 0,
+        r3Count = 0;
+      records.forEach((record) => {
+        if (record.get('r1')) r1Count++;
+        if (record.get('r2')) r2Count++;
+        if (record.get('r3')) r3Count++;
+      });
+
+      this.logger.debug(
+        `Relationships found: r1=${r1Count}, r2=${r2Count}, r3=${r3Count}`,
+      );
+
+      // Extract projects for response
+      const projectsMap = new Map();
+
+      records.forEach((record) => {
+        const project = record.get('p');
+        if (!project) return;
+
+        const projectId = project.properties.id || project.properties.ma;
+
+        if (!projectsMap.has(projectId)) {
+          projectsMap.set(projectId, {
+            id: project.properties.id,
+            key: project.properties.ma,
+            name: project.properties.ten,
+            client: project.properties.khach_hang,
+            field: project.properties.linh_vuc,
+            type: project.properties.loai,
+            startDate: project.properties.start_date?.toString(),
+            status: project.properties.trang_thai,
+            technologies: [],
+            employees: [],
+          });
+        }
+
+        const proj = projectsMap.get(projectId);
+
+        // Add tech if exists
+        const tech = record.get('tech');
+        if (tech && tech.properties.ten) {
+          if (!proj.technologies.includes(tech.properties.ten)) {
+            proj.technologies.push(tech.properties.ten);
+          }
+        }
+
+        // Add employee if exists
+        const emp = record.get('e');
+        if (emp) {
+          const empId = emp.properties.id;
+          if (!proj.employees.find((e: any) => e.id === empId)) {
+            proj.employees.push({
+              id: empId,
+              name: emp.properties.ho_ten,
+            });
+          }
+        }
+      });
+
+      const projects = Array.from(projectsMap.values());
+
+      // Extract graph data for visualization
+      let graphData: any = null;
+      if (this.graphExtractor.shouldGenerateGraph(records)) {
+        graphData = this.graphExtractor.extractGraphData(records);
+        this.logger.debug(
+          `Extracted graph: ${graphData.nodes.length} nodes, ${graphData.links.length} links`,
+        );
+      }
+
+      return { projects, graphData };
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : 'Database connection error';
+      this.logger.error('Search projects by name error:', errorMessage);
+      throw new ServiceUnavailableException(errorMessage);
     }
   }
 

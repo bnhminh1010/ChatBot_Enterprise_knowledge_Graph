@@ -1,7 +1,7 @@
-import { QueryClassifierService } from '../ai/query-classifier.service';
 import { OllamaService } from '../ai/ollama.service';
 import { ChromaDBService } from '../ai/chroma-db.service';
 import { GeminiService } from '../ai/gemini.service';
+import { OpenRouterService } from '../ai/openrouter.service';
 import { EmployeesService } from '../employees/employees.service';
 import { SkillsService } from '../skills/skills.service';
 import { DepartmentsService } from '../departments/departments.service';
@@ -13,11 +13,16 @@ import { OllamaRAGService } from './services/ollama-rag.service';
 import { GeminiToolsService } from '../ai/gemini-tools.service';
 import { PositionsService } from '../positions/positions.service';
 import { TechnologiesService } from '../technologies/technologies.service';
+import { UploadIntentHandlerService } from './services/upload-intent-handler.service';
+import { ContextCompressionService } from './services/context-compression.service';
+import { UserPreferenceService } from './services/user-preference.service';
+import { SuggestedQuestionsService } from './services/suggested-questions.service';
+import { DatabaseContextService } from './services/database-context.service';
 export declare class ChatService {
-    private queryClassifier;
     private ollamaService;
     private chromaDBService;
     private geminiService;
+    private openRouterService;
     private employeesService;
     private skillsService;
     private departmentsService;
@@ -29,14 +34,29 @@ export declare class ChatService {
     private geminiToolsService;
     private positionsService;
     private technologiesService;
+    private uploadIntentHandler;
+    private contextCompressionService;
+    private userPreferenceService;
+    private suggestedQuestionsService;
+    private databaseContextService;
     private readonly logger;
-    constructor(queryClassifier: QueryClassifierService, ollamaService: OllamaService, chromaDBService: ChromaDBService, geminiService: GeminiService, employeesService: EmployeesService, skillsService: SkillsService, departmentsService: DepartmentsService, projectsService: ProjectsService, searchService: SearchService, conversationHistoryService: ConversationHistoryService, redisConversationService: RedisConversationService, ollamaRAGService: OllamaRAGService, geminiToolsService: GeminiToolsService, positionsService: PositionsService, technologiesService: TechnologiesService);
+    constructor(ollamaService: OllamaService, chromaDBService: ChromaDBService, geminiService: GeminiService, openRouterService: OpenRouterService, employeesService: EmployeesService, skillsService: SkillsService, departmentsService: DepartmentsService, projectsService: ProjectsService, searchService: SearchService, conversationHistoryService: ConversationHistoryService, redisConversationService: RedisConversationService, ollamaRAGService: OllamaRAGService, geminiToolsService: GeminiToolsService, positionsService: PositionsService, technologiesService: TechnologiesService, uploadIntentHandler: UploadIntentHandlerService, contextCompressionService: ContextCompressionService, userPreferenceService: UserPreferenceService, suggestedQuestionsService: SuggestedQuestionsService, databaseContextService: DatabaseContextService);
     processQuery(message: string, conversationId?: string, userId?: string): Promise<{
         response: string;
         queryType: string;
-        queryLevel: 'simple' | 'medium' | 'complex';
+        queryLevel: 'simple' | 'agent';
         processingTime: number;
         conversationId?: string;
+        metadata?: {
+            confidence?: number;
+            reasoning?: string[];
+            warnings?: string[];
+            retrievedDataSources?: string[];
+        };
+        suggestedQuestions?: Array<{
+            question: string;
+            category: string;
+        }>;
     }>;
     private handleSimpleQuery;
     private handleFilteredQuery;

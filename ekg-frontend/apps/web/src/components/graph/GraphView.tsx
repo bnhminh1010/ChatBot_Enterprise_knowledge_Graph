@@ -32,7 +32,7 @@ interface GraphViewProps {
 
 export function GraphView({ data, width = 600, height = 400, onNodeClick }: GraphViewProps) {
   const { theme } = useTheme();
-  const fgRef = useRef<any>();
+  const fgRef = useRef<any>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -59,6 +59,7 @@ export function GraphView({ data, width = 600, height = 400, onNodeClick }: Grap
       department: '#8b5cf6', // purple
       skill: '#10b981', // green
       project: '#f59e0b', // amber
+      document: '#ef4444', // red
       default: '#6b7280', // gray
     };
     return colors[node.type as keyof typeof colors] || colors.default;
@@ -120,6 +121,10 @@ export function GraphView({ data, width = 600, height = 400, onNodeClick }: Grap
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-amber-500" />
           <span className="text-foreground">Project</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <span className="text-foreground">Document</span>
         </div>
       </div>
     </div>

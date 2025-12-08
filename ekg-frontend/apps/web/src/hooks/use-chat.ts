@@ -1,6 +1,14 @@
 import { useState, useCallback } from "react";
 import { sendChatMessage } from "@/server/services/chat";
 
+export interface MessageMetadata {
+  confidence?: number;
+  reasoning?: string[];
+  warnings?: string[];
+  retrievedDataSources?: string[];
+  processingTime?: number;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -14,6 +22,11 @@ export interface Message {
     | "pending"
     | "sending"
     | "delivered";
+  metadata?: MessageMetadata;
+  suggestedQuestions?: Array<{
+    question: string;
+    category: string;
+  }>;
 }
 
 interface UseChatOptions {
@@ -55,12 +68,25 @@ export function useChat(options: UseChatOptions = {}) {
         // Gọi API /chat với conversationId
         const response = await sendChatMessage(content, options.conversationId);
 
+        // Build metadata from response
+        const metadata: MessageMetadata = {
+          processingTime: response.processingTime,
+          ...(response.metadata && {
+            confidence: response.metadata.confidence,
+            reasoning: response.metadata.reasoning,
+            warnings: response.metadata.warnings,
+            retrievedDataSources: response.metadata.retrievedDataSources,
+          }),
+        };
+
         const botResponse: Message = {
           id: generateUniqueId(),
           role: "assistant",
           content: response.response,
           timestamp: new Date(),
           status: "delivered",
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+          suggestedQuestions: response.suggestedQuestions,
         };
 
         // Cập nhật tin nhắn đã gửi và thêm phản hồi

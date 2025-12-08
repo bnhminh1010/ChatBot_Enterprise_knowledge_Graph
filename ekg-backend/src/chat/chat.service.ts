@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { QueryClassifierService } from '../ai/query-classifier.service';
+// QueryClassifierService removed - using Gemini agents for all queries
 import { OllamaService } from '../ai/ollama.service';
 import { ChromaDBService } from '../ai/chroma-db.service';
 import { GeminiService } from '../ai/gemini.service';
+import { OpenRouterService } from '../ai/openrouter.service';
 
 // Import existing services
 import { EmployeesService } from '../employees/employees.service';
@@ -17,16 +18,21 @@ import { GeminiToolsService } from '../ai/gemini-tools.service';
 import { PositionsService } from '../positions/positions.service';
 import { TechnologiesService } from '../technologies/technologies.service';
 import { UploadIntentHandlerService } from './services/upload-intent-handler.service';
+import { ContextCompressionService } from './services/context-compression.service';
+import { UserPreferenceService } from './services/user-preference.service';
+import { SuggestedQuestionsService } from './services/suggested-questions.service';
+import { DatabaseContextService } from './services/database-context.service';
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
 
   constructor(
-    private queryClassifier: QueryClassifierService,
+    // QueryClassifierService removed
     private ollamaService: OllamaService,
     private chromaDBService: ChromaDBService,
     private geminiService: GeminiService,
+    private openRouterService: OpenRouterService, // 🆕 OpenRouter fallback
     private employeesService: EmployeesService,
     private skillsService: SkillsService,
     private departmentsService: DepartmentsService,
@@ -39,7 +45,11 @@ export class ChatService {
     private positionsService: PositionsService,
     private technologiesService: TechnologiesService,
     private uploadIntentHandler: UploadIntentHandlerService,
-  ) { }
+    private contextCompressionService: ContextCompressionService, // Phase 3
+    private userPreferenceService: UserPreferenceService, // Phase 3
+    private suggestedQuestionsService: SuggestedQuestionsService, // Phase 4
+    private databaseContextService: DatabaseContextService, // Schema-aware context
+  ) {}
 
   /**
    * Xử lý user query và trả về response
@@ -51,9 +61,19 @@ export class ChatService {
   ): Promise<{
     response: string;
     queryType: string;
-    queryLevel: 'simple' | 'medium' | 'complex';
+    queryLevel: 'simple' | 'agent'; // Support both levels
     processingTime: number;
     conversationId?: string;
+    metadata?: {
+      confidence?: number;
+      reasoning?: string[];
+      warnings?: string[];
+      retrievedDataSources?: string[];
+    };
+    suggestedQuestions?: Array<{
+      question: string;
+      category: string;
+    }>;
   }> {
     const startTime = Date.now();
 
@@ -62,17 +82,18 @@ export class ChatService {
       // Bước 0: Tạo hoặc lấy conversation (Redis instead of Neo4j)
       let activeConversationId = conversationId;
 
-      if (userId) {
-        try {
-          activeConversationId =
-            await this.redisConversationService.getOrCreateConversation(
-              userId,
-              conversationId,
-            );
-          this.logger.debug(`Using conversation: ${activeConversationId}`);
-        } catch (error) {
-          this.logger.warn(`Could not create/get conversation: ${error}`);
-        }
+      // Always create/get conversation (use anonymous if no userId)
+      try {
+        const effectiveUserId = userId || 'anonymous';
+        activeConversationId =
+          await this.redisConversationService.getOrCreateConversation(
+            effectiveUserId,
+            conversationId,
+          );
+        this.logger.debug(`Using conversation: ${activeConversationId}`);
+      } catch (error) {
+        this.logger.warn(`Could not create/get conversation: ${error}`);
+        // Keep activeConversationId from frontend if Redis fails
       }
 
       // Lưu user message vào Redis
@@ -93,7 +114,8 @@ export class ChatService {
       // ========== UPLOAD INTENT DETECTION ==========
       if (this.uploadIntentHandler.hasUploadIntent(message)) {
         this.logger.log('🔍 Detected upload intent');
-        const uploadResponse = await this.uploadIntentHandler.handleUploadIntent(message);
+        const uploadResponse =
+          await this.uploadIntentHandler.handleUploadIntent(message);
 
         if (uploadResponse) {
           const responseStr =
@@ -170,74 +192,107 @@ export class ChatService {
         }
       }
 
-      // Bước 1: Phân loại query
-      const classified = this.queryClassifier.classifyQuery(message);
-      this.logger.debug(
-        `Query classified: ${classified.type} (${classified.level})`,
+      // ========== CONTEXTUAL FOLLOW-UP DETECTION ==========
+      // Handle confirmation queries like "Có", "Yes", "OK" based on previous context
+      if (activeConversationId && message.trim().length < 20) {
+        const messageLower = message.toLowerCase().trim();
+        const isConfirmation = [
+          'có',
+          'yes',
+          'ok',
+          'được',
+          'đồng ý',
+          'rồi',
+        ].includes(messageLower);
+
+        if (isConfirmation) {
+          try {
+            // Get last assistant message
+            const history =
+              await this.redisConversationService.getConversationContext(
+                activeConversationId,
+                3, // Get last 3  messages
+              );
+
+            // Find the last assistant message with a prompt
+            const lastAssistantMsg = history
+              .reverse()
+              .find(
+                (m) =>
+                  m.role === 'assistant' && m.content.includes('Bạn có muốn'),
+              );
+
+            if (lastAssistantMsg) {
+              this.logger.log(
+                '🔄 Detected confirmation for prompt in previous message',
+              );
+
+              // Extract context from previous message
+              let followUpQuery = '';
+
+              // Check various prompt patterns
+              if (lastAssistantMsg.content.includes('dự án')) {
+                // Extract project name from context
+                const projectMatch =
+                  lastAssistantMsg.content.match(/dự án\s+([A-Z0-9]+)/i);
+                if (projectMatch) {
+                  followUpQuery = `Thông tin về dự án ${projectMatch[1]}`;
+                }
+              } else if (lastAssistantMsg.content.includes('phòng ban')) {
+                const deptMatch =
+                  lastAssistantMsg.content.match(/phòng\s+(\w+)/i);
+                if (deptMatch) {
+                  followUpQuery = `Thông tin phòng ${deptMatch[1]}`;
+                }
+              } else if (lastAssistantMsg.content.includes('nhân viên')) {
+                const empMatch =
+                  lastAssistantMsg.content.match(/nhân viên\s+(.+?)\s+/i);
+                if (empMatch) {
+                  followUpQuery = `Thông tin nhân viên ${empMatch[1]}`;
+                }
+              }
+
+              // If we extracted a follow-up query, process it
+              if (followUpQuery) {
+                this.logger.log(
+                  `📝 Rewriting query: "${message}" → "${followUpQuery}"`,
+                );
+                message = followUpQuery; // Replace the query!
+              } else {
+                // Generic follow-up based on last context
+                this.logger.log('Using generic follow-up handler');
+                message = lastAssistantMsg.content
+                  .replace(/Bạn có muốn.+?\?/g, '')
+                  .trim();
+                if (message.includes('Không tìm thấy')) {
+                  // Extract entity from "Không tìm thấy X"
+                  const entityMatch = message.match(/Không tìm thấy (.+?)\./);
+                  if (entityMatch) {
+                    message = `Thông tin về ${entityMatch[1]}`;
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            this.logger.warn(`Could not process confirmation: ${err}`);
+          }
+        }
+      }
+
+      // ========== NEW: ALWAYS USE GEMINI AGENTS ==========
+      // No more manual classification - let Gemini choose appropriate tools
+      this.logger.log(
+        '📦 Sending 33 tools to Gemini: universal_search, search_employees_by_name, search_employees_by_level, search_employees_by_email, search_employees_by_phone, search_employees_by_status, get_employee_by_id, count_employees, search_employees_by_department, search_employees_advanced, search_positions_by_name, search_positions_by_level, search_positions_by_group, count_positions, search_departments_by_name, search_departments_by_code, get_department_by_id, count_departments, search_projects_by_name, search_projects_by_client, search_projects_by_status, search_projects_by_field, search_projects_by_type, get_project_by_id, count_projects, get_project_manager, search_technologies_by_name, search_technologies_by_type, count_technologies, list_skills, get_document_content, list_project_documents, search_documents',
       );
 
-      // FORCE COMPLEX for testing tools if query contains "chức danh", "vị trí", or "kỹ năng"
-      // This is a temporary override to ensure tools are used for the user's request
-      if (
-        message.toLowerCase().includes('chức danh') ||
-        message.toLowerCase().includes('vị trí') ||
-        message.toLowerCase().includes('kỹ năng') ||
-        message.toLowerCase().includes('skill') ||
-        message.toLowerCase().includes('danh sách kỹ năng') ||
-        message.toLowerCase().includes('tài liệu') || // Document queries
-        message.toLowerCase().includes('lấy tài liệu') ||
-        message.toLowerCase().includes('file') ||
-        classified.type === 'filter-search' // NEW: Upgrade filter-search to complex
-      ) {
-        classified.level = 'complex';
-        classified.type = 'tool-enabled-search';
-        this.logger.log(`🔧 Forced complex level for skill/position/filter/document query`);
-      }
-
-      // Bước 2: Xử lý theo level
-      switch (classified.level) {
-        case 'simple':
-          response = await this.handleSimpleQuery(
-            classified.type,
-            classified.value,
-          );
-          break;
-
-        case 'medium':
-          // ... (existing medium logic) ...
-          if (
-            classified.filters &&
-            Object.keys(classified.filters).length > 0
-          ) {
-            response = await this.handleFilteredQuery(
-              classified.type,
-              classified.filters,
-              message,
-            );
-          } else {
-            response = await this.handleMediumQuery(
-              classified.type,
-              classified.value,
-              message,
-              activeConversationId,
-            );
-          }
-          break;
-
-        case 'complex':
-          // Use new Tool-enabled flow
-          response = await this.handleComplexQuery(
-            classified.type,
-            classified.value,
-            message,
-            activeConversationId,
-          );
-          break;
-
-        default:
-          response =
-            'Xin lỗi, tôi không hiểu yêu cầu của bạn. Hãy thử các lệnh như "Danh sách nhân viên", "Tìm [tên]", etc.';
-      }
+      // Use Gemini agents for ALL queries (complex query handler)
+      response = await this.handleComplexQuery(
+        'agent-search', // Generic type
+        undefined,
+        message,
+        activeConversationId,
+        userId, // Pass userId for preference tracking
+      );
 
       const processingTime = Date.now() - startTime;
 
@@ -249,8 +304,8 @@ export class ChatService {
             'assistant',
             response,
             {
-              queryType: classified.type,
-              queryLevel: classified.level,
+              queryType: 'agent-search',
+              queryLevel: 'agent',
               processingTime,
             },
           );
@@ -259,12 +314,30 @@ export class ChatService {
         }
       }
 
+      // 🆕 Phase 4: Generate suggested follow-up questions
+      let suggestedQuestions: Array<{ question: string; category: string }> =
+        [];
+      try {
+        const suggestions =
+          this.suggestedQuestionsService.generateQuickSuggestions(
+            'agent-search',
+            [], // No entities extracted here, could be enhanced
+          );
+        suggestedQuestions = suggestions.map((s) => ({
+          question: s.question,
+          category: s.category,
+        }));
+      } catch (error) {
+        this.logger.warn(`Could not generate suggestions: ${error}`);
+      }
+
       return {
         response,
-        queryType: classified.type,
-        queryLevel: classified.level,
+        queryType: 'agent-search',
+        queryLevel: 'agent',
         processingTime,
         conversationId: activeConversationId,
+        suggestedQuestions,
       };
     } catch (error) {
       // ... (existing error handling) ...
@@ -440,7 +513,9 @@ export class ChatService {
         }
         // Filter by skill
         else if (filters.skill) {
-          employees = await this.employeesService.findBySkill(filters.skill);
+          // findBySkill returns { employees, graphData }, not just employees array
+          const result = await this.employeesService.findBySkill(filters.skill);
+          employees = result.employees; // Extract employees array
           filterContext = `Kỹ năng: ${filters.skill}`;
         }
         // Filter by project
@@ -621,35 +696,85 @@ export class ChatService {
 
   /**
    * Xử lý complex queries (dùng Gemini + Tools)
+   * ENHANCED: With context compression to optimize tokens
    */
   private async handleComplexQuery(
     type: string,
     value: string | undefined,
     message: string,
     conversationId?: string,
+    userId?: string,
   ): Promise<string> {
     try {
-      // 1. Get conversation history
+      // 1. Get conversation history with compression
       let conversationHistory: Array<{
         role: 'user' | 'assistant' | 'function';
         content: string;
       }> = [];
+      let contextSummary = '';
+
+      this.logger.debug(
+        `🔍 handleComplexQuery - conversationId: ${conversationId || 'NOT PROVIDED'}`,
+      );
 
       if (conversationId) {
         try {
+          // Get all messages for compression
           const messages =
             await this.redisConversationService.getConversationContext(
               conversationId,
-              10,
+              20, // Get more messages for compression analysis
             );
-          conversationHistory = messages
+
+          this.logger.debug(
+            `🔍 Got ${messages.length} messages from Redis for conversation ${conversationId}`,
+          );
+
+          // 🆕 Phase 3: Compress context
+          const compressed =
+            await this.contextCompressionService.compressContext(messages);
+
+          // Use summary and recent messages
+          contextSummary = compressed.summary;
+
+          // 🆕 Include key entities in context for better follow-up handling
+          if (compressed.keyEntities.length > 0) {
+            const entityList = compressed.keyEntities
+              .slice(0, 5)
+              .map((e) => `${e.type}: "${e.value}"`)
+              .join(', ');
+            contextSummary += `\n🔑 Đã đề cập: ${entityList}`;
+          }
+
+          conversationHistory = compressed.recentMessages
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .map((m) => ({
               role: m.role as 'user' | 'assistant',
               content: m.content,
             }));
+
+          this.logger.debug(
+            `Context compressed: ${messages.length} messages → ` +
+              `${compressed.recentMessages.length} recent + summary (${compressed.tokenEstimate} tokens)`,
+          );
         } catch (error) {
           this.logger.warn(`Could not retrieve conversation context: ${error}`);
+        }
+      }
+
+      // 🆕 Phase 3: Record query for user preferences
+      if (userId) {
+        try {
+          // Extract topic from query type
+          const topic = type.split('-')[0]; // e.g., 'agent-search' -> 'agent'
+          await this.userPreferenceService.recordQuery(
+            userId,
+            message,
+            [],
+            topic,
+          );
+        } catch (error) {
+          this.logger.warn(`Could not record user preference: ${error}`);
         }
       }
 
@@ -660,51 +785,114 @@ export class ChatService {
       );
 
       // 3. Call Gemini with Tools
-      // Enhanced context with explicit tool usage rules
-      const context = `Bạn là trợ lý AI cho hệ thống EKG. 
+      // Enhanced context with explicit tool usage rules + conversation summary + database schema
+      // Include conversation history summary with entities for better coherence
 
-⚠️ CRITICAL - DOCUMENT QUERIES (HIGHEST PRIORITY):
+      // Build conversation context with ACTUAL recent messages for coreference
+      let conversationContext = '';
+      if (contextSummary) {
+        conversationContext = `\n📋 TÓM TẮT: ${contextSummary}\n`;
+      }
+      // Add last 4 messages explicitly so Gemini can see what was just discussed
+      if (conversationHistory.length > 0) {
+        const recentChat = conversationHistory
+          .slice(-6) // Get last 6 messages for more context
+          .map(
+            (m, idx) =>
+              `[${idx + 1}] ${m.role === 'user' ? '👤 User' : '🤖 Bot'}: ${m.content.substring(0, 250)}`,
+          )
+          .join('\n');
+        conversationContext += `\n📝 LỊCH SỬ HỘI THOẠI:\n${recentChat}\n`;
 
-🚨 RULE #1 - NEVER ASK FOR DOCUMENT IDs:
-- When user says "lấy tài liệu X", "tìm tài liệu Y", "file Z", "doc ABC"
-- YOU MUST call "search_documents" tool with documentName extracted from user query
-- NEVER reply with "Tôi cần ID dự án" or ask user for any IDs
-- The search_documents tool will handle everything automatically
+        // Extract mentioned entities from history for easier reference
+        const entityPatterns = [
+          /dự án[:\s]*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+          /nhân viên:?\s*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+          /phòng ban:?\s*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+          /tên[:\s]*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+        ];
+        const mentionedEntities: string[] = [];
+        for (const msg of conversationHistory.slice(-4)) {
+          for (const pattern of entityPatterns) {
+            const matches = msg.content.matchAll(pattern);
+            for (const match of matches) {
+              if (match[1] && match[1].length > 2 && match[1].length < 50) {
+                mentionedEntities.push(match[1].trim());
+              }
+            }
+          }
+        }
+        if (mentionedEntities.length > 0) {
+          const uniqueEntities = [...new Set(mentionedEntities)].slice(0, 5);
+          conversationContext += `\n🔖 ENTITIES ĐÃ NHẮC: ${uniqueEntities.join(', ')}\n`;
+        }
 
-Example flows:
-- User: "lấy tài liệu README" 
-  → YOU: call search_documents(documentName="README")
-  → System finds 1 result → auto calls get_document_content → show content
-  
-- User: "tài liệu thiết kế UI ZenDo"
-  → YOU: call search_documents(documentName="thiết kế UI ZenDo")
-  → System finds multiple → show numbered list
-  
-- User: "file mô hình đồ thị"
-  → YOU: call search_documents(documentName="mô hình đồ thị")
-  → System finds 0 → suggest alternatives
+        this.logger.debug(
+          `🔍 Conversation history (${conversationHistory.length} msgs): ${recentChat.substring(0, 300)}`,
+        );
+      } else {
+        this.logger.debug('🔍 No conversation history available');
+      }
 
-🔴 FORBIDDEN RESPONSES:
-❌ "Bạn cần cung cấp ID dự án"
-❌ "Vui lòng cho tôi biết ID tài liệu"
-❌ "Tôi cần biết ID của dự án"
+      // 🆕 Get database context (schema, statistics, sample data)
+      let databaseContext = '';
+      try {
+        databaseContext = await this.databaseContextService.getAgentContext();
+        if (databaseContext) {
+          databaseContext = `\n${databaseContext}\n`;
+        }
+      } catch (error) {
+        this.logger.warn(`Could not get database context: ${error}`);
+      }
 
-✅ CORRECT BEHAVIOR:
-→ Immediately call search_documents tool
-→ Let the system handle the rest
+      const context = `Bạn là trợ lý AI thông minh cho hệ thống EKG (Enterprise Knowledge Graph).
+${conversationContext}
 
-⚠️ OTHER TOOL USAGE RULES:
+🎯 NHIỆM VỤ: Trả lời câu hỏi về nhân sự, dự án, phòng ban, kỹ năng trong tổ chức.
 
-1. When user asks "danh sách kỹ năng" or "tất cả kỹ năng" or "có những kỹ năng gì":
-   → MUST use "list_skills" tool (NO parameters needed)
-   → NEVER use "search_employees_by_name" for this
-   
-2. "list_skills" returns ONLY skill names, NOT employee information
+📖 TỪ VỰNG QUAN TRỌNG:
+- "Team" = "Phòng ban" (ví dụ: Team Frontend = Phòng ban Frontend)
+- "nhân sự cần học bổ sung" = sử dụng tool find_employees_needing_training
 
-3. When user asks about employees with specific skills:
-   → Then use "search_employees_by..." tools
+📚 VÍ DỤ CÁCH XỬ LÝ CÂU HỎI:
 
-Hãy sử dụng các công cụ được cung cấp để trả lời câu hỏi của người dùng một cách chính xác.`;
+Q: "Ai biết React trong phòng IT?"
+→ Gọi: search_employees_advanced(skill="React", department="IT")
+
+Q: "Team Frontend ai đang rảnh?" 
+→ Gọi: get_team_availability(departmentName="Frontend")
+
+Q: "Dự án nào đang triển khai?"  
+→ Gọi: search_projects_by_status(status="Đang triển khai")
+
+Q: "Cho tôi thông tin về phòng Kỹ thuật"
+→ Gọi: search_departments_by_name(name="Kỹ thuật")
+
+Q: "Nhân viên cấp Senior có bao nhiêu người?"
+→ Gọi: search_employees_by_level(level="Senior")
+
+Q: "Tìm tài liệu hướng dẫn sử dụng"
+→ Gọi: search_documents(documentName="hướng dẫn sử dụng")
+
+Q: "Tìm nhân sự cần học bổ sung" / "Ai cần đào tạo thêm?"
+→ Gọi: find_employees_needing_training()
+
+Q: "Dự án X có những ai tham gia?"
+→ Gọi: get_project_by_id(id="X") hoặc search_projects_by_name(name="X")
+
+Q: "Anh Minh làm ở đâu?" (context: đang nói về Nguyễn Văn Minh)
+→ Gọi: search_employees_by_name(name="Nguyễn Văn Minh")
+
+🔄 CONTEXT AWARENESS:
+- "đó/nó/họ/anh ấy" → Tìm trong LỊCH SỬ ở trên
+- KHÔNG hỏi lại thông tin đã có
+- Thay thế tham chiếu bằng tên cụ thể khi gọi tool
+
+📌 QUY TẮC:
+- Luôn gọi tool để lấy dữ liệu, KHÔNG tự bịa
+- Trả lời bằng tiếng Việt tự nhiên
+- Nếu không tìm thấy → Nói rõ "Không tìm thấy"
+- Format câu trả lời dễ đọc (bullet points nếu nhiều kết quả)`;
 
       let geminiResult = await this.geminiService.generateResponseWithTools(
         message,
@@ -754,8 +942,140 @@ Hãy sử dụng các công cụ được cung cấp để trả lời câu hỏ
       } else {
         return 'Xin lỗi, tôi không thể hoàn thành yêu cầu do quá trình xử lý quá phức tạp.';
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error handling complex query: ${error}`);
+
+      // 🆕 FALLBACK CHAIN: Gemini → OpenRouter → Ollama
+      if (
+        error.message?.includes('429') ||
+        error.message?.includes('quota') ||
+        error.message?.includes('Too Many Requests') ||
+        error.message?.includes('exceeded')
+      ) {
+        this.logger.warn(
+          '⚠️ Gemini quota exceeded, trying OpenRouter fallback...',
+        );
+
+        // 🔄 FALLBACK 1: Try OpenRouter
+        try {
+          if (this.openRouterService.isAvailable()) {
+            this.logger.log(
+              '🔄 Using OpenRouter as fallback (Gemini quota exceeded)',
+            );
+
+            // Build conversation history for OpenRouter
+            let openRouterHistory: Array<{
+              role: 'user' | 'assistant' | 'function';
+              content: string;
+            }> = [];
+            if (conversationId) {
+              try {
+                const messages =
+                  await this.redisConversationService.getConversationContext(
+                    conversationId,
+                    5,
+                  );
+                openRouterHistory = messages
+                  .filter((m) => m.role === 'user' || m.role === 'assistant')
+                  .map((m) => ({
+                    role: m.role as 'user' | 'assistant',
+                    content: m.content,
+                  }));
+              } catch (e) {
+                // Continue without history
+              }
+            }
+
+            // Use OpenRouter with simple text generation (no tools in fallback)
+            const openRouterContext =
+              'Bạn là trợ lý AI thông minh cho hệ thống EKG. Trả lời câu hỏi về nhân sự, dự án, phòng ban trong tổ chức. Trả lời bằng tiếng Việt tự nhiên.';
+
+            const openRouterResponse =
+              await this.openRouterService.generateResponse(
+                message,
+                openRouterContext,
+              );
+
+            if (openRouterResponse && openRouterResponse.trim()) {
+              return `🔄 *[OpenRouter Fallback]*\n\n${openRouterResponse}`;
+            }
+          }
+        } catch (openRouterError: any) {
+          this.logger.warn(
+            `OpenRouter fallback failed: ${openRouterError.message}`,
+          );
+
+          // If OpenRouter also has quota issues, continue to Ollama
+          if (
+            !openRouterError.message?.includes('429') &&
+            !openRouterError.message?.includes('quota')
+          ) {
+            // Log non-quota errors but still try Ollama
+            this.logger.error(
+              `OpenRouter error (non-quota): ${openRouterError.message}`,
+            );
+          }
+        }
+
+        // 🔄 FALLBACK 2: Try Ollama RAG
+        this.logger.warn('⚠️ OpenRouter also failed, trying Ollama RAG...');
+        try {
+          const ollamaAvailable = await this.ollamaRAGService.isAvailable();
+          if (ollamaAvailable) {
+            this.logger.log('🔄 Using Ollama RAG as final fallback');
+
+            // Build conversation history for Ollama
+            let ollamaHistory: Array<{
+              role: 'user' | 'assistant';
+              content: string;
+            }> = [];
+            if (conversationId) {
+              try {
+                const messages =
+                  await this.redisConversationService.getConversationContext(
+                    conversationId,
+                    5,
+                  );
+                ollamaHistory = messages
+                  .filter((m) => m.role === 'user' || m.role === 'assistant')
+                  .map((m) => ({
+                    role: m.role as 'user' | 'assistant',
+                    content: m.content,
+                  }));
+              } catch (e) {
+                // Continue without history
+              }
+            }
+
+            // Use Ollama RAG service
+            const ollamaResponse = await this.ollamaRAGService.queryWithRAG(
+              message,
+              'employees', // Default collection
+              10,
+              ollamaHistory,
+            );
+
+            return `🔄 *[Ollama Fallback - All APIs quota hết]*\n\n${ollamaResponse}`;
+          } else {
+            this.logger.warn('Ollama is not available for fallback');
+          }
+        } catch (ollamaError) {
+          this.logger.error(`Ollama fallback also failed: ${ollamaError}`);
+        }
+
+        return 'Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau.';
+      }
+
+      // Handle empty model output error gracefully
+      if (
+        error.message?.includes(
+          'model output must contain either output text or tool calls',
+        ) ||
+        error.message?.includes('empty')
+      ) {
+        return 'Xin lỗi, tôi không thể xử lý yêu cầu này. Vui lòng thử lại với câu hỏi đơn giản hơn.';
+      }
+
       throw error;
     }
   }

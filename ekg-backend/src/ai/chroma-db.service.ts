@@ -156,7 +156,8 @@ export class ChromaDBService implements OnModuleInit {
     topK: number = 5,
   ): Promise<SearchResult[]> {
     try {
-      const collection = this.collections.get(collectionName);
+      // Lazy load collection if not in memory
+      const collection = await this.ensureCollectionLoaded(collectionName);
       if (!collection) {
         throw new Error(`Collection ${collectionName} not found`);
       }
@@ -187,14 +188,158 @@ export class ChromaDBService implements OnModuleInit {
 
   /**
    * Hybrid search: Vector search + keyword matching
+   * Combines semantic similarity with keyword relevance
    */
   async hybridSearch(
     collectionName: string,
     queryText: string,
     topK: number = 5,
+    options?: {
+      vectorWeight?: number;
+      keywordWeight?: number;
+      filters?: Record<string, any>;
+    },
   ): Promise<SearchResult[]> {
-    // Dùng vector search cho giờ
-    return this.search(collectionName, queryText, topK);
+    try {
+      const collection = this.collections.get(collectionName);
+      if (!collection) {
+        throw new Error(`Collection ${collectionName} not found`);
+      }
+
+      // Default weights
+      const vectorWeight = options?.vectorWeight ?? 0.7;
+      const keywordWeight = options?.keywordWeight ?? 0.3;
+
+      // Step 1: Get vector similarity scores
+      const queryEmbedding =
+        await this.ollamaService.generateEmbedding(queryText);
+
+      const vectorScores = collection.map((vector) => ({
+        id: vector.id,
+        content: vector.content,
+        metadata: vector.metadata,
+        vectorScore: this.cosineSimilarity(queryEmbedding, vector.embedding),
+      }));
+
+      // Step 2: Calculate keyword relevance scores (BM25-like)
+      const queryKeywords = this.extractKeywords(queryText);
+      const keywordScores = vectorScores.map((item) => {
+        const contentKeywords = this.extractKeywords(item.content);
+        const keywordScore = this.calculateKeywordRelevance(
+          queryKeywords,
+          contentKeywords,
+          item.content,
+        );
+        return {
+          ...item,
+          keywordScore,
+        };
+      });
+
+      // Step 3: Apply metadata filters if provided
+      let filtered = keywordScores;
+      if (options?.filters) {
+        filtered = keywordScores.filter((item) =>
+          this.matchesFilters(item.metadata, options.filters!),
+        );
+      }
+
+      // Step 4: Combine scores with weights
+      const hybridScores = filtered.map((item) => ({
+        id: item.id,
+        content: item.content,
+        metadata: item.metadata,
+        similarity:
+          vectorWeight * item.vectorScore + keywordWeight * item.keywordScore,
+      }));
+
+      // Step 5: Sort and return top-K
+      const sorted = hybridScores
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, topK);
+
+      this.logger.debug(
+        `Hybrid search in ${collectionName}: ${sorted.length} results (vector: ${vectorWeight}, keyword: ${keywordWeight})`,
+      );
+
+      return sorted;
+    } catch (error) {
+      this.logger.error(
+        `Failed to perform hybrid search in ${collectionName}: ${error}`,
+      );
+      // Fallback to pure vector search
+      return this.search(collectionName, queryText, topK);
+    }
+  }
+
+  /**
+   * Extract keywords from text (simple tokenization)
+   */
+  private extractKeywords(text: string): string[] {
+    return text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '') // Remove punctuation
+      .split(/\s+/)
+      .filter((word) => word.length > 2); // Filter short words
+  }
+
+  /**
+   * Calculate keyword relevance score (BM25-like)
+   * Simple implementation: TF (term frequency) with length normalization
+   */
+  private calculateKeywordRelevance(
+    queryKeywords: string[],
+    contentKeywords: string[],
+    content: string,
+  ): number {
+    if (queryKeywords.length === 0) return 0;
+
+    let score = 0;
+    const contentLength = contentKeywords.length;
+
+    for (const qKeyword of queryKeywords) {
+      // Count occurrences in content
+      const tf = contentKeywords.filter((k) => k === qKeyword).length;
+
+      if (tf > 0) {
+        // TF with diminishing returns (log normalization)
+        const normalizedTF = Math.log(1 + tf);
+        // Length normalization (shorter documents get slight boost)
+        const lengthNorm = 1 / Math.sqrt(contentLength || 1);
+        score += normalizedTF * lengthNorm;
+      }
+    }
+
+    // Normalize by number of query keywords
+    return score / Math.sqrt(queryKeywords.length);
+  }
+
+  /**
+   * Check if metadata matches filters
+   */
+  private matchesFilters(
+    metadata: Record<string, any>,
+    filters: Record<string, any>,
+  ): boolean {
+    for (const [key, value] of Object.entries(filters)) {
+      if (Array.isArray(value)) {
+        // If filter value is array, check if metadata value is in array
+        if (!value.includes(metadata[key])) {
+          return false;
+        }
+      } else {
+        // Exact match or substring match for strings
+        const metaValue = metadata[key];
+        if (typeof value === 'string' && typeof metaValue === 'string') {
+          if (!metaValue.toLowerCase().includes(value.toLowerCase())) {
+            return false;
+          }
+        } else if (metaValue !== value) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /**
@@ -265,6 +410,43 @@ export class ChromaDBService implements OnModuleInit {
     }
 
     return dotProduct / (normA * normB);
+  }
+
+  /**
+   * Ensure collection is loaded (lazy loading support)
+   */
+  private async ensureCollectionLoaded(
+    collectionName: string,
+  ): Promise<StoredVector[] | null> {
+    // Check if collection is in memory
+    if (this.collections.has(collectionName)) {
+      return this.collections.get(collectionName)!;
+    }
+
+    // Check if lazy loading is disabled (load all on init)
+    const lazyLoad = process.env.CHROMADB_LAZY_LOAD === 'true';
+    if (!lazyLoad) {
+      return null;
+    }
+
+    // Try to load from file
+    const filePath = this.collectionFiles.get(collectionName);
+    if (!filePath || !fs.existsSync(filePath)) {
+      return null;
+    }
+
+    try {
+      this.logger.log(`Lazy loading collection: ${collectionName}`);
+      const data = fs.readFileSync(filePath, 'utf-8');
+      const vectors = JSON.parse(data);
+      this.collections.set(collectionName, vectors);
+      return vectors;
+    } catch (error) {
+      this.logger.warn(
+        `Could not lazy load ${collectionName}: ${error.message}`,
+      );
+      return null;
+    }
   }
 
   /**

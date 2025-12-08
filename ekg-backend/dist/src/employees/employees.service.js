@@ -17,11 +17,14 @@ exports.EmployeesService = void 0;
 const common_1 = require("@nestjs/common");
 const neo4j_driver_1 = __importDefault(require("neo4j-driver"));
 const neo4j_service_1 = require("../core/neo4j/neo4j.service");
+const graph_data_extractor_service_1 = require("../chat/services/graph-data-extractor.service");
 let EmployeesService = EmployeesService_1 = class EmployeesService {
     neo;
+    graphExtractor;
     logger = new common_1.Logger(EmployeesService_1.name);
-    constructor(neo) {
+    constructor(neo, graphExtractor) {
         this.neo = neo;
+        this.graphExtractor = graphExtractor;
     }
     async list(skip = 0, limit = 20) {
         try {
@@ -161,21 +164,36 @@ let EmployeesService = EmployeesService_1 = class EmployeesService {
     }
     async findBySkill(skillName, skip = 0, limit = 50) {
         try {
-            const rows = await this.neo.run(`MATCH (e:NhanSu)-[r:CO_KY_NANG]->(k:KyNang)
+            const result = await this.neo.runRaw(`MATCH (k:KyNang)
          WHERE toLower(k.ten) CONTAINS toLower($skillName)
+         MATCH (e:NhanSu)-[r:CO_KY_NANG]->(k)
          OPTIONAL MATCH (pb:PhongBan)-[:CO_NHAN_SU]-(e)
-         WITH e, pb, collect({name:k.ten, level:r.level}) AS skills
-         RETURN {
-           id: e.empId,
-           empId: e.empId,
-           name: e.ten,
-           position: e.chucDanh,
-           department: COALESCE(pb.ten, 'N/A'),
-           skills: skills
-         } AS emp
+         RETURN e, k, pb, r
          ORDER BY e.ten
          SKIP $skip LIMIT $limit`, { skillName, skip: neo4j_driver_1.default.int(skip), limit: neo4j_driver_1.default.int(limit) });
-            return rows.map((r) => r.emp);
+            const records = result.records;
+            const employees = records.map((record) => {
+                const emp = record.get('e');
+                const dept = record.get('pb');
+                const skill = record.get('k');
+                const rel = record.get('r');
+                return {
+                    id: emp.properties.empId || emp.properties.id,
+                    empId: emp.properties.empId || emp.properties.id,
+                    name: emp.properties.ten || emp.properties.ho_ten,
+                    position: emp.properties.chucDanh,
+                    department: dept?.properties?.ten || 'N/A',
+                    skills: [
+                        { name: skill.properties.ten, level: rel?.properties?.level },
+                    ],
+                };
+            });
+            let graphData = null;
+            if (this.graphExtractor.shouldGenerateGraph(records)) {
+                graphData = this.graphExtractor.extractGraphData(records);
+                this.logger.debug(`Extracted graph: ${graphData.nodes.length} nodes, ${graphData.links.length} links`);
+            }
+            return { employees, graphData };
         }
         catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'Database connection error';
@@ -516,6 +534,7 @@ let EmployeesService = EmployeesService_1 = class EmployeesService {
 exports.EmployeesService = EmployeesService;
 exports.EmployeesService = EmployeesService = EmployeesService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [neo4j_service_1.Neo4jService])
+    __metadata("design:paramtypes", [neo4j_service_1.Neo4jService,
+        graph_data_extractor_service_1.GraphDataExtractor])
 ], EmployeesService);
 //# sourceMappingURL=employees.service.js.map

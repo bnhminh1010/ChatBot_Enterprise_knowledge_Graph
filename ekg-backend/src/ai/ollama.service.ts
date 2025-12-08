@@ -1,19 +1,54 @@
+/**
+ * @fileoverview Ollama Service - Local LLM Integration
+ * @module ai/ollama.service
+ *
+ * Service tích hợp với Ollama local LLM server.
+ * Cung cấp embeddings và text generation cho fallback hoặc local processing.
+ *
+ * Tính năng:
+ * - Health check server
+ * - Model availability check
+ * - Embedding generation (cho ChromaDB)
+ * - Text generation
+ * - Model pulling
+ *
+ * @author APTX3107 Team
+ */
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
+/**
+ * Response interface cho embedding API.
+ */
 export interface OllamaEmbeddingResponse {
   embedding: number[];
 }
 
+/**
+ * Response interface cho generate API.
+ */
 export interface OllamaGenerateResponse {
   response: string;
   done: boolean;
 }
 
+/**
+ * Service tích hợp với Ollama local LLM.
+ * Sử dụng làm fallback khi Gemini không khả dụng.
+ *
+ * @example
+ * if (await ollamaService.isHealthy()) {
+ *   const response = await ollamaService.generateResponse(prompt);
+ * }
+ */
 @Injectable()
 export class OllamaService {
   private readonly logger = new Logger(OllamaService.name);
+
+  /** URL của Ollama server */
   private readonly ollamaUrl: string;
+
+  /** Tên model mặc định */
   private readonly modelName: string;
 
   constructor() {
@@ -22,7 +57,9 @@ export class OllamaService {
   }
 
   /**
-   * Kiểm tra Ollama server có chạy không
+   * Kiểm tra Ollama server có đang chạy không.
+   *
+   * @returns true nếu server respond, false nếu không
    */
   async isHealthy(): Promise<boolean> {
     try {
@@ -37,15 +74,17 @@ export class OllamaService {
   }
 
   /**
-   * Kiểm tra model có tồn tại không
+   * Kiểm tra model có tồn tại trên server không.
+   *
+   * @param modelName - Tên model cần kiểm tra (mặc định: config model)
+   * @returns true nếu model tồn tại
    */
   async hasModel(modelName: string = this.modelName): Promise<boolean> {
     try {
       const response = await axios.get(`${this.ollamaUrl}/api/tags`);
       const models = response.data?.models || [];
       return models.some(
-        (m: any) =>
-          m.name === modelName || m.name.startsWith(modelName + ':'),
+        (m: any) => m.name === modelName || m.name.startsWith(modelName + ':'),
       );
     } catch (error) {
       return false;
@@ -53,9 +92,13 @@ export class OllamaService {
   }
 
   /**
-   * Tạo embedding từ text (dùng cho ChromaDB)
+   * Tạo embedding từ text.
+   * Sử dụng cho ChromaDB vector storage.
+   *
    * @param text - Text cần tạo embedding
-   * @param model - Model dùng cho embedding (mặc định là modelName)
+   * @param model - Model dùng cho embedding (mặc định: config model)
+   * @returns Vector embedding
+   * @throws Error nếu không thể tạo embedding
    */
   async generateEmbedding(
     text: string,
@@ -81,8 +124,14 @@ export class OllamaService {
   }
 
   /**
-   * Sinh response từ prompt (dùng cho complex queries)
-   * Lưu ý: Đây chỉ dùng cho fallback, thường dùng Gemini cho quality tốt hơn
+   * Sinh text response từ prompt.
+   * Sử dụng làm fallback cho complex queries khi Gemini không khả dụng.
+   *
+   * @param prompt - Prompt cần generate
+   * @param model - Model name (mặc định: config model)
+   * @param stream - Enable streaming (mặc định: false)
+   * @returns Generated text response
+   * @throws Error nếu không thể generate
    */
   async generateResponse(
     prompt: string,
@@ -110,8 +159,11 @@ export class OllamaService {
   }
 
   /**
-   * Pull (download) model từ Ollama registry
-   * Dùng để setup model lần đầu
+   * Pull (download) model từ Ollama registry.
+   * Sử dụng để setup model lần đầu.
+   *
+   * @param modelName - Tên model cần pull (mặc định: config model)
+   * @throws Error nếu không thể pull model
    */
   async pullModel(modelName: string = this.modelName): Promise<void> {
     try {

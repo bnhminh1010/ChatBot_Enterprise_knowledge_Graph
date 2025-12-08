@@ -1,23 +1,57 @@
+/**
+ * @fileoverview Agent Memory Service - Execution History & Learning
+ * @module ai/agent/agent-memory.service
+ *
+ * Service quản lý agent execution history và learning.
+ * Sử dụng Redis để lưu trữ executions, feedback và statistics.
+ *
+ * Tính năng:
+ * - Lưu trữ execution history
+ * - Tìm kiếm executions tương tự
+ * - Thu thập user feedback
+ * - Thống kê performance
+ *
+ * @see AgentExecutorService - Tạo executions
+ * @author APTX3107 Team
+ */
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { AgentExecution, AgentFeedback } from './types/agent.types';
 
 /**
- * Agent Memory Service
- * Quản lý agent execution history và learning
+ * Service quản lý memory và history cho agent.
+ * Lưu trữ executions trong Redis với TTL 7 ngày.
+ *
+ * @example
+ * await agentMemoryService.saveExecution(execution);
+ * const relevant = await agentMemoryService.getRelevantHistory(query);
  */
 @Injectable()
 export class AgentMemoryService {
   private readonly logger = new Logger(AgentMemoryService.name);
-  private readonly EXECUTION_KEY_PREFIX = 'agent:execution:';
-  private readonly EXECUTION_LIST_KEY = 'agent:executions:list';
-  private readonly FEEDBACK_KEY_PREFIX = 'agent:feedback:';
-  private readonly TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
+  /** Prefix cho execution keys trong Redis */
+  private readonly EXECUTION_KEY_PREFIX = 'agent:execution:';
+
+  /** Key cho sorted set chứa danh sách executions */
+  private readonly EXECUTION_LIST_KEY = 'agent:executions:list';
+
+  /** Prefix cho feedback keys */
+  private readonly FEEDBACK_KEY_PREFIX = 'agent:feedback:';
+
+  /** TTL cho các records: 7 ngày */
+  private readonly TTL_SECONDS = 7 * 24 * 60 * 60;
+
+  /**
+   * @param redis - Redis client được inject
+   */
   constructor(@Inject('REDIS_CLIENT') private readonly redis: Redis) {}
 
   /**
-   * Lưu agent execution vào Redis
+   * Lưu agent execution vào Redis.
+   * Tự động cleanup nếu vượt quá 1000 executions.
+   *
+   * @param execution - Execution cần lưu
    */
   async saveExecution(execution: AgentExecution): Promise<void> {
     try {
@@ -44,7 +78,10 @@ export class AgentMemoryService {
   }
 
   /**
-   * Lấy execution by ID
+   * Lấy execution theo ID.
+   *
+   * @param executionId - ID của execution
+   * @returns Execution hoặc null nếu không tìm thấy
    */
   async getExecution(executionId: string): Promise<AgentExecution | null> {
     try {
@@ -63,11 +100,14 @@ export class AgentMemoryService {
   }
 
   /**
-   * Lấy recent executions
+   * Lấy danh sách executions gần đây.
+   * Sắp xếp theo thời gian mới nhất trước.
+   *
+   * @param limit - Số lượng executions tối đa
+   * @returns Danh sách executions
    */
   async getRecentExecutions(limit = 10): Promise<AgentExecution[]> {
     try {
-      // Get IDs of recent executions (sorted by timestamp desc)
       const executionIds = await this.redis.zrevrange(
         this.EXECUTION_LIST_KEY,
         0,
@@ -78,7 +118,6 @@ export class AgentMemoryService {
         return [];
       }
 
-      // Get execution data
       const executions: AgentExecution[] = [];
       for (const id of executionIds) {
         const execution = await this.getExecution(id);
@@ -95,8 +134,12 @@ export class AgentMemoryService {
   }
 
   /**
-   * Tìm executions tương tự (by query similarity)
-   * TODO: Implement semantic search khi có ChromaDB integration
+   * Tìm executions tương tự dựa trên query.
+   * Hiện tại sử dụng keyword matching, TODO: semantic search với ChromaDB.
+   *
+   * @param query - Query cần tìm executions tương tự
+   * @param limit - Số lượng kết quả tối đa
+   * @returns Danh sách executions liên quan
    */
   async getRelevantHistory(
     query: string,
@@ -105,8 +148,6 @@ export class AgentMemoryService {
     this.logger.debug(`Getting relevant history for query: "${query}"`);
 
     try {
-      // For now, just return recent executions
-      // TODO: Implement semantic similarity search
       const recent = await this.getRecentExecutions(limit * 2);
 
       // Simple keyword matching
@@ -124,7 +165,6 @@ export class AgentMemoryService {
         return relevant;
       }
 
-      // Fallback: return recent
       return recent.slice(0, limit);
     } catch (error) {
       this.logger.error(`Failed to get relevant history: ${error.message}`);
@@ -133,7 +173,9 @@ export class AgentMemoryService {
   }
 
   /**
-   * Save user feedback cho execution
+   * Lưu user feedback cho một execution.
+   *
+   * @param feedback - Feedback từ user (rating, comments)
    */
   async saveFeedback(feedback: AgentFeedback): Promise<void> {
     try {
@@ -150,7 +192,10 @@ export class AgentMemoryService {
   }
 
   /**
-   * Get feedback for execution
+   * Lấy feedback cho một execution.
+   *
+   * @param executionId - ID của execution
+   * @returns Feedback hoặc null nếu không có
    */
   async getFeedback(executionId: string): Promise<AgentFeedback | null> {
     try {
@@ -169,7 +214,10 @@ export class AgentMemoryService {
   }
 
   /**
-   * Get execution statistics
+   * Lấy thống kê execution.
+   * Bao gồm total, average steps, average time, success rate.
+   *
+   * @returns Object chứa các metrics
    */
   async getStatistics(): Promise<{
     totalExecutions: number;
@@ -217,24 +265,22 @@ export class AgentMemoryService {
   }
 
   /**
-   * Clear all agent memory (for testing/debugging)
+   * Xóa toàn bộ agent memory.
+   * Chỉ sử dụng cho testing/debugging.
    */
   async clearMemory(): Promise<void> {
     try {
-      // Get all execution IDs
       const executionIds = await this.redis.zrange(
         this.EXECUTION_LIST_KEY,
         0,
         -1,
       );
 
-      // Delete all executions
       for (const id of executionIds) {
         await this.redis.del(`${this.EXECUTION_KEY_PREFIX}${id}`);
         await this.redis.del(`${this.FEEDBACK_KEY_PREFIX}${id}`);
       }
 
-      // Clear execution list
       await this.redis.del(this.EXECUTION_LIST_KEY);
 
       this.logger.log('Cleared all agent memory');

@@ -47,6 +47,7 @@ export type AgentStepStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 /**
  * Agent Result - Kết quả cuối cùng từ agent execution
+ * ENHANCED: Bao gồm confidence scores và reasoning metadata
  */
 export interface AgentResult {
   success: boolean;
@@ -55,6 +56,12 @@ export interface AgentResult {
   totalSteps: number;
   executionTime: number; // Tổng thời gian (ms)
   error?: string; // Error message nếu failed
+
+  // 🆕 Enhanced metadata
+  confidence?: number; // Overall confidence (0-1)
+  reasoning?: string[]; // Key reasoning steps
+  warnings?: string[]; // Any warnings during execution
+  retrievedDataSources?: string[]; // Tools used to get data
 }
 
 /**

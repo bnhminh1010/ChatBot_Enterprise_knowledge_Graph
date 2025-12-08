@@ -1,3 +1,14 @@
+/**
+ * @fileoverview Agent Executor Service - ReAct Pattern Implementation
+ * @module ai/agent/agent-executor.service
+ * 
+ * Service thực thi agent plans theo ReAct pattern (Reasoning → Action → Observation).
+ * Bao gồm các tính năng: Self-Reflection, Error Recovery, Dynamic Re-planning.
+ * 
+ * @see AgentPlannerService - Tạo execution plan
+ * @see AgentMemoryService - Lưu trữ context
+ * @author APTX3107 Team
+ */
 import { Injectable, Logger } from '@nestjs/common';
 import { GeminiService } from '../gemini.service';
 import { GeminiToolsService } from '../gemini-tools.service';
@@ -11,21 +22,34 @@ import {
 } from './types/agent.types';
 
 /**
- * Agent Executor Service
- * Thực thi agent plan theo ReAct pattern
- * (Reasoning → Action → Observation)
+ * Service thực thi agent plans với self-reflection và error recovery.
+ * Implements ReAct pattern: Reasoning → Action → Observation.
+ * 
+ * @example
+ * const result = await agentExecutorService.execute(plan);
+ * if (result.success) {
+ *   console.log(result.finalAnswer);
+ * }
  */
 @Injectable()
 export class AgentExecutorService {
   private readonly logger = new Logger(AgentExecutorService.name);
 
+  /**
+   * @param geminiToolsService - Service thực thi tools
+   * @param geminiService - Service gọi Gemini API
+   */
   constructor(
     private readonly geminiToolsService: GeminiToolsService,
     private readonly geminiService: GeminiService,
   ) {}
 
   /**
-   * Execute agent plan
+   * Thực thi agent plan và trả về kết quả.
+   * Main entry point để chạy một plan đã được tạo bởi AgentPlannerService.
+   * 
+   * @param plan - Plan cần thực thi (từ AgentPlannerService)
+   * @returns Kết quả bao gồm success, finalAnswer, steps, executionTime
    */
   async execute(plan: AgentPlan): Promise<AgentResult> {
     const startTime = Date.now();
@@ -80,7 +104,12 @@ export class AgentExecutorService {
   }
 
   /**
-   * Execute steps theo thứ tự
+   * Thực thi các steps theo thứ tự tuần tự.
+   * Hỗ trợ dynamic planning - thêm steps mới nếu cần.
+   * 
+   * @param steps - Danh sách steps cần thực thi
+   * @param goal - Mục tiêu của plan
+   * @returns Danh sách steps đã thực thi
    */
   private async executeSteps(
     steps: AgentStep[],
@@ -143,7 +172,10 @@ export class AgentExecutorService {
   }
 
   /**
-   * Execute một step cụ thể
+   * Thực thi một step cụ thể bằng cách gọi tool tương ứng.
+   * 
+   * @param step - Step cần thực thi
+   * @returns Step với observation và status đã cập nhật
    */
   private async executeStep(step: AgentStep): Promise<AgentStep> {
     const startTime = Date.now();
@@ -178,7 +210,12 @@ export class AgentExecutorService {
   }
 
   /**
-   * Kiểm tra xem có cần thêm steps không
+   * Kiểm tra xem có cần thêm steps để hoàn thành goal không.
+   * Sử dụng Gemini để quyết định dựa trên kết quả hiện tại.
+   * 
+   * @param goal - Mục tiêu cần đạt được
+   * @param executedSteps - Các steps đã thực thi
+   * @returns Object chứa continue flag và newSteps nếu cần
    */
   private async checkIfNeedsMoreSteps(
     goal: string,
@@ -229,7 +266,7 @@ export class AgentExecutorService {
   }
 
   /**
-   * Build prompt để check xem có cần steps thêm không
+   * Tạo prompt để kiểm tra xem có cần thêm steps không.
    */
   private buildContinuationPrompt(
     goal: string,
@@ -258,7 +295,7 @@ Chỉ trả về JSON, KHÔNG thêm gì khác.
   }
 
   /**
-   * System prompt cho continuation check
+   * System prompt cho việc kiểm tra continuation.
    */
   private getContinuationSystemPrompt(): string {
     return `
@@ -277,7 +314,12 @@ LUÔN trả về JSON hợp lệ.
   }
 
   /**
-   * Generate final answer từ executed steps
+   * Tổng hợp kết quả từ các steps và tạo câu trả lời cuối cùng.
+   * Sử dụng Gemini để format response một cách tự nhiên.
+   * 
+   * @param goal - Mục tiêu ban đầu
+   * @param executedSteps - Các steps đã thực thi
+   * @returns Câu trả lời cuối cùng cho user
    */
   private async generateFinalAnswer(
     goal: string,
@@ -306,7 +348,7 @@ LUÔN trả về JSON hợp lệ.
   }
 
   /**
-   * Build prompt cho final answer
+   * Tạo prompt cho việc generate final answer.
    */
   private buildFinalAnswerPrompt(
     goal: string,
@@ -340,7 +382,7 @@ REQUIREMENTS:
   }
 
   /**
-   * System prompt cho final answer generation
+   * System prompt cho việc generate final answer.
    */
   private getFinalAnswerSystemPrompt(): string {
     return `
@@ -357,7 +399,10 @@ NGUYÊN TẮC:
   }
 
   /**
-   * Format observation thành string
+   * Format observation thành string dễ đọc.
+   * 
+   * @param observation - Kết quả từ tool execution
+   * @returns String đã được format
    */
   private formatObservation(observation: any): string {
     if (typeof observation === 'string') {

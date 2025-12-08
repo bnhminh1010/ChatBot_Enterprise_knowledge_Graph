@@ -1,13 +1,25 @@
-import { apiPost } from '@/lib/api-client';
+import { apiPost } from "@/lib/api-client";
+
+export interface ChatMessageMetadata {
+  confidence?: number;
+  reasoning?: string[];
+  warnings?: string[];
+  retrievedDataSources?: string[];
+}
 
 export interface ChatMessage {
   message: string;
   response: string;
   queryType: string;
-  queryLevel: 'simple' | 'medium' | 'complex';
+  queryLevel: "simple" | "medium" | "complex" | "agent";
   processingTime: number;
   conversationId?: string;
   timestamp: Date;
+  metadata?: ChatMessageMetadata;
+  suggestedQuestions?: Array<{
+    question: string;
+    category: string;
+  }>;
 }
 
 /**
@@ -17,7 +29,7 @@ export async function sendChatMessage(
   message: string,
   conversationId?: string
 ): Promise<ChatMessage> {
-  const response = await apiPost<ChatMessage>('/chat', {
+  const response = await apiPost<ChatMessage>("/chat", {
     message,
     conversationId,
   });
@@ -29,7 +41,7 @@ export async function sendChatMessage(
  * Index entities vào ChromaDB (tối ưu semantic search)
  */
 export async function indexEntitiesToChroma(): Promise<{ message: string }> {
-  const response = await apiPost<{ message: string }>('/chat/index', {});
+  const response = await apiPost<{ message: string }>("/chat/index", {});
   return response;
 }
 
@@ -41,7 +53,7 @@ export async function checkChatHealth(): Promise<{
   services: Record<string, boolean>;
 }> {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/chat/health`,
+    `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002"}/chat/health`
   );
   return response.json();
 }

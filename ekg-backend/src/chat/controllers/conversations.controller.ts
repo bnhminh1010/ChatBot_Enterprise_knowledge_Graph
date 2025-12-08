@@ -8,7 +8,10 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { RedisConversationService, Conversation } from '../services/redis-conversation.service';
+import {
+  RedisConversationService,
+  Conversation,
+} from '../services/redis-conversation.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -23,9 +26,7 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 export class ConversationsController {
   private readonly logger = new Logger(ConversationsController.name);
 
-  constructor(
-    private readonly redisConversation: RedisConversationService,
-  ) {}
+  constructor(private readonly redisConversation: RedisConversationService) {}
 
   /**
    * GET /chat/conversations
@@ -47,12 +48,15 @@ export class ConversationsController {
         return {
           ...conv,
           title: firstUserMessage
-            ? firstUserMessage.content.slice(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
+            ? firstUserMessage.content.slice(0, 50) +
+              (firstUserMessage.content.length > 50 ? '...' : '')
             : 'New Chat',
         };
       });
 
-      this.logger.log(`Retrieved ${conversationsWithTitle.length} conversations for user ${user.username}`);
+      this.logger.log(
+        `Retrieved ${conversationsWithTitle.length} conversations for user ${user.username}`,
+      );
       return conversationsWithTitle;
     } catch (error) {
       this.logger.error(`Error getting user conversations: ${error}`);
@@ -73,13 +77,11 @@ export class ConversationsController {
     @CurrentUser() user: any,
   ): Promise<Conversation> {
     try {
-      const conversation = await this.redisConversation.getConversation(conversationId);
+      const conversation =
+        await this.redisConversation.getConversation(conversationId);
 
       if (!conversation) {
-        throw new HttpException(
-          'Conversation not found',
-          HttpStatus.NOT_FOUND,
-        );
+        throw new HttpException('Conversation not found', HttpStatus.NOT_FOUND);
       }
 
       // Verify ownership
@@ -90,13 +92,17 @@ export class ConversationsController {
         );
       }
 
-      this.logger.log(`Retrieved conversation ${conversationId} for user ${user.username}`);
+      this.logger.log(
+        `Retrieved conversation ${conversationId} for user ${user.username}`,
+      );
       return conversation;
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
-      this.logger.error(`Error getting conversation ${conversationId}: ${error}`);
+      this.logger.error(
+        `Error getting conversation ${conversationId}: ${error}`,
+      );
       throw new HttpException(
         'Failed to retrieve conversation',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -114,13 +120,11 @@ export class ConversationsController {
     @CurrentUser() user: any,
   ): Promise<{ message: string }> {
     try {
-      const conversation = await this.redisConversation.getConversation(conversationId);
+      const conversation =
+        await this.redisConversation.getConversation(conversationId);
 
       if (!conversation) {
-        throw new HttpException(
-          'Conversation not found',
-          HttpStatus.NOT_FOUND,
-        );
+        throw new HttpException('Conversation not found', HttpStatus.NOT_FOUND);
       }
 
       // Verify ownership
@@ -133,7 +137,9 @@ export class ConversationsController {
 
       await this.redisConversation.deleteConversation(conversationId);
 
-      this.logger.log(`Deleted conversation ${conversationId} for user ${user.username}`);
+      this.logger.log(
+        `Deleted conversation ${conversationId} for user ${user.username}`,
+      );
       return {
         message: `Conversation ${conversationId} deleted successfully`,
       };
@@ -141,7 +147,9 @@ export class ConversationsController {
       if (error instanceof HttpException) {
         throw error;
       }
-      this.logger.error(`Error deleting conversation ${conversationId}: ${error}`);
+      this.logger.error(
+        `Error deleting conversation ${conversationId}: ${error}`,
+      );
       throw new HttpException(
         'Failed to delete conversation',
         HttpStatus.INTERNAL_SERVER_ERROR,

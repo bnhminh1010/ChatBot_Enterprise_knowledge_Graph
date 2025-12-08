@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   S3Client,
@@ -227,7 +228,14 @@ export class S3Service {
       );
 
       return buffer;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle specific S3 errors
+      if (error?.name === 'NoSuchKey' || error?.Code === 'NoSuchKey') {
+        this.logger.warn(`S3 object not found: ${key}`);
+        throw new NotFoundException(
+          `File không tồn tại trong S3: ${key}. File có thể đã bị xóa hoặc chưa được upload.`,
+        );
+      }
       this.logger.error(`Failed to get object from S3: ${error}`);
       throw new InternalServerErrorException('Failed to download file from S3');
     }

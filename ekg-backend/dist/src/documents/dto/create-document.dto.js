@@ -9,11 +9,20 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UploadResponseDto = exports.CreateDocumentDto = void 0;
+exports.UploadResponseDto = exports.CreateDocumentDto = exports.TargetType = void 0;
 const class_validator_1 = require("class-validator");
+var TargetType;
+(function (TargetType) {
+    TargetType["DuAn"] = "DuAn";
+    TargetType["PhongBan"] = "PhongBan";
+    TargetType["CongTy"] = "CongTy";
+    TargetType["NhanSu"] = "NhanSu";
+})(TargetType || (exports.TargetType = TargetType = {}));
 class CreateDocumentDto {
-    projectId;
     ten;
+    targetType;
+    targetId;
+    projectId;
     mo_ta;
     tag;
     version;
@@ -22,11 +31,22 @@ exports.CreateDocumentDto = CreateDocumentDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], CreateDocumentDto.prototype, "projectId", void 0);
+], CreateDocumentDto.prototype, "ten", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(TargetType),
+    __metadata("design:type", String)
+], CreateDocumentDto.prototype, "targetType", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], CreateDocumentDto.prototype, "ten", void 0);
+], CreateDocumentDto.prototype, "targetId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateDocumentDto.prototype, "projectId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -51,6 +71,8 @@ class UploadResponseDto {
     loai_file;
     created_at;
     download_url;
+    targetType;
+    targetId;
 }
 exports.UploadResponseDto = UploadResponseDto;
 //# sourceMappingURL=create-document.dto.js.map

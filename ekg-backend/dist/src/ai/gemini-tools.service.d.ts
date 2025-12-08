@@ -6,6 +6,10 @@ import { ProjectsService } from '../projects/projects.service';
 import { SkillsService } from '../skills/skills.service';
 import { DocumentsService } from '../documents/documents.service';
 import { ChromaDBService } from './chroma-db.service';
+import { OllamaService } from './ollama.service';
+import { QueryCacheService } from '../chat/services/query-cache.service';
+import { RecommendationService } from '../chat/services/recommendation.service';
+import { SchedulerService } from '../chat/services/scheduler.service';
 export interface ToolDefinition {
     name: string;
     description: string;
@@ -24,8 +28,14 @@ export declare class GeminiToolsService {
     private readonly skillsService;
     private readonly documentsService;
     private readonly chromaDBService;
+    private readonly ollamaService;
+    private readonly queryCacheService;
+    private readonly recommendationService;
+    private readonly schedulerService;
     private readonly logger;
-    constructor(positionsService: PositionsService, technologiesService: TechnologiesService, employeesService: EmployeesService, departmentsService: DepartmentsService, projectsService: ProjectsService, skillsService: SkillsService, documentsService: DocumentsService, chromaDBService: ChromaDBService);
+    private readonly CACHEABLE_TOOLS;
+    private readonly CACHE_TTL;
+    constructor(positionsService: PositionsService, technologiesService: TechnologiesService, employeesService: EmployeesService, departmentsService: DepartmentsService, projectsService: ProjectsService, skillsService: SkillsService, documentsService: DocumentsService, chromaDBService: ChromaDBService, ollamaService: OllamaService, queryCacheService: QueryCacheService, recommendationService: RecommendationService, schedulerService: SchedulerService);
     getTools(): ToolDefinition[];
     private getUniversalTools;
     private getEmployeeTools;
@@ -35,5 +45,9 @@ export declare class GeminiToolsService {
     private getTechnologyTools;
     private getSkillTools;
     private getDocumentTools;
+    private getRecommendationTools;
+    private getSchedulerTools;
     executeTool(name: string, args: any): Promise<any>;
+    private getCacheTTL;
+    private getDefaultChartTitle;
 }

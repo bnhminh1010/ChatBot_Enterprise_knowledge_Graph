@@ -246,9 +246,9 @@ let DocumentReaderService = DocumentReaderService_1 = class DocumentReaderServic
         try {
             this.logger.log(`Reading document from S3: ${s3Key}`);
             const buffer = await this.s3Service.getObject(s3Key);
-            const extension = path.extname(fileName);
+            const extension = path.extname(s3Key);
             const timestamp = Date.now();
-            tempFilePath = path.join(this.tempDir, `${timestamp}-${fileName}`);
+            tempFilePath = path.join(this.tempDir, `${timestamp}-${fileName}${extension}`);
             fs.writeFileSync(tempFilePath, buffer);
             this.logger.debug(`Downloaded from S3 to temp: ${tempFilePath} (${buffer.length} bytes)`);
             const content = await this.parseFile(tempFilePath);

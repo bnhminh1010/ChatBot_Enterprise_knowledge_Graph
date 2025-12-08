@@ -7,6 +7,9 @@ import { Check, Copy, Network, Upload } from 'lucide-react';
 import { GraphView } from '@/components/graph/GraphView';
 import { shouldShowGraph, createSampleGraphData, parseGraphFromResponse } from '@/lib/graph-parser';
 import { DocumentUploadModal } from './DocumentUploadModal';
+import { ChartRenderer, parseChartFromResponse } from './ChartRenderer';
+import { RecommendationCard, parseRecommendationFromResponse } from './RecommendationCard';
+import { TaskCard, parseTaskFromResponse } from './TaskCard';
 
 interface MessageContentProps {
   content: string;
@@ -57,6 +60,15 @@ export function MessageContent({ content, role }: MessageContentProps) {
   // Check if we should show graph visualization (only for non-upload-prompt content)
   const shouldDisplayGraph = role === 'assistant' && !uploadPrompt && shouldShowGraph(content);
   const graphData = shouldDisplayGraph ? (parseGraphFromResponse(content) || createSampleGraphData()) : null;
+  
+  // Check if response contains chart data
+  const chartConfig = role === 'assistant' ? parseChartFromResponse(content) : null;
+  
+  // Check if response contains recommendation data
+  const recommendationData = role === 'assistant' ? parseRecommendationFromResponse(content) : null;
+  
+  // Check if response contains task/scheduler data
+  const taskData = role === 'assistant' ? parseTaskFromResponse(content) : null;
 
   // If this is an upload prompt, render special UI instead of markdown
   if (uploadPrompt) {
@@ -197,6 +209,21 @@ export function MessageContent({ content, role }: MessageContentProps) {
       >
         {content}
       </ReactMarkdown>
+
+      {/* Chart Visualization */}
+      {chartConfig && (
+        <ChartRenderer config={chartConfig} />
+      )}
+
+      {/* Recommendation Card */}
+      {recommendationData && (
+        <RecommendationCard {...recommendationData} />
+      )}
+
+      {/* Task/Scheduler Card */}
+      {taskData && (
+        <TaskCard {...taskData} />
+      )}
 
       {/* Graph Visualization */}
       {graphData && (

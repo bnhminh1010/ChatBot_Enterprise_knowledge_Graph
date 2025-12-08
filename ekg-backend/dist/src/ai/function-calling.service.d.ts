@@ -27,7 +27,20 @@ export declare class FunctionCallingService {
         position?: string;
         project?: string;
         limit?: number;
-    }): Promise<any[]>;
+    }): Promise<any[] | {
+        employees: {
+            id: any;
+            empId: any;
+            name: any;
+            position: any;
+            department: any;
+            skills: {
+                name: any;
+                level: any;
+            }[];
+        }[];
+        graphData: any;
+    }>;
     getEmployeeDetails(args: {
         empId: string;
     }): Promise<any>;
@@ -53,7 +66,20 @@ export declare class FunctionCallingService {
     findEmployeesBySkill(args: {
         skill: string;
         limit?: number;
-    }): Promise<any[]>;
+    }): Promise<{
+        employees: {
+            id: any;
+            empId: any;
+            name: any;
+            position: any;
+            department: any;
+            skills: {
+                name: any;
+                level: any;
+            }[];
+        }[];
+        graphData: any;
+    }>;
     findEmployeesByDepartment(args: {
         department: string;
         limit?: number;

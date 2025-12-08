@@ -40,6 +40,9 @@ class ChatResponseDto {
     processingTime;
     conversationId;
     timestamp;
+    metadata;
+    suggestedQuestions;
+    graphData;
 }
 exports.ChatResponseDto = ChatResponseDto;
 //# sourceMappingURL=chat-query.dto.js.map

@@ -22,4 +22,5 @@ export declare class DocumentsController {
         success: boolean;
         message: string;
     }>;
+    getDocumentContentDirect(docId: string): Promise<unknown>;
 }

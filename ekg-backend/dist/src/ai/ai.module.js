@@ -10,6 +10,7 @@ exports.AiModule = void 0;
 const common_1 = require("@nestjs/common");
 const ollama_service_1 = require("./ollama.service");
 const gemini_service_1 = require("./gemini.service");
+const openrouter_service_1 = require("./openrouter.service");
 const query_classifier_service_1 = require("./query-classifier.service");
 const chroma_db_service_1 = require("./chroma-db.service");
 const neo4j_module_1 = require("../core/neo4j/neo4j.module");
@@ -22,6 +23,7 @@ const departments_module_1 = require("../departments/departments.module");
 const projects_module_1 = require("../projects/projects.module");
 const skills_module_1 = require("../skills/skills.module");
 const documents_module_1 = require("../documents/documents.module");
+const document_chunking_service_1 = require("./document-chunking.service");
 const agent_planner_service_1 = require("./agent/agent-planner.service");
 const agent_executor_service_1 = require("./agent/agent-executor.service");
 const agent_memory_service_1 = require("./agent/agent-memory.service");
@@ -37,15 +39,18 @@ exports.AiModule = AiModule = __decorate([
             technologies_module_1.TechnologiesModule,
             employees_module_1.EmployeesModule,
             departments_module_1.DepartmentsModule,
-            projects_module_1.ProjectsModule,
+            (0, common_1.forwardRef)(() => projects_module_1.ProjectsModule),
             skills_module_1.SkillsModule,
             documents_module_1.DocumentsModule,
+            (0, common_1.forwardRef)(() => require('../chat/chat.module').ChatModule),
         ],
         providers: [
             ollama_service_1.OllamaService,
             gemini_service_1.GeminiService,
+            openrouter_service_1.OpenRouterService,
             query_classifier_service_1.QueryClassifierService,
             chroma_db_service_1.ChromaDBService,
+            document_chunking_service_1.DocumentChunkingService,
             gemini_tools_service_1.GeminiToolsService,
             agent_planner_service_1.AgentPlannerService,
             agent_executor_service_1.AgentExecutorService,
@@ -54,8 +59,10 @@ exports.AiModule = AiModule = __decorate([
         exports: [
             ollama_service_1.OllamaService,
             gemini_service_1.GeminiService,
+            openrouter_service_1.OpenRouterService,
             query_classifier_service_1.QueryClassifierService,
             chroma_db_service_1.ChromaDBService,
+            document_chunking_service_1.DocumentChunkingService,
             gemini_tools_service_1.GeminiToolsService,
             agent_planner_service_1.AgentPlannerService,
             agent_executor_service_1.AgentExecutorService,

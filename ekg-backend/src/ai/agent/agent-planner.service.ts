@@ -1,3 +1,20 @@
+/**
+ * @fileoverview Agent Planner Service - Query Analysis & Plan Generation
+ * @module ai/agent/agent-planner.service
+ * 
+ * Service phân tích user query và tạo execution plan theo ReAct pattern.
+ * Sử dụng QueryAnalyzerService để phân tích sâu query trước khi tạo plan.
+ * 
+ * Tính năng:
+ * - Multi-intent detection
+ * - Entity extraction  
+ * - Complexity assessment
+ * - Dynamic tool selection
+ * 
+ * @see AgentExecutorService - Thực thi plan
+ * @see QueryAnalyzerService - Phân tích query
+ * @author APTX3107 Team
+ */
 import { Injectable, Logger } from '@nestjs/common';
 import { GeminiService } from '../gemini.service';
 import {
@@ -6,42 +23,106 @@ import {
   PlanStep,
   DEFAULT_AGENT_CONFIG,
 } from './types/agent.types';
+import { QueryAnalyzerService } from '../../chat/services/query-analyzer.service';
+import {
+  QueryAnalysisResult,
+  IntentType,
+} from '../../core/interfaces/query-analysis.interface';
 
 /**
- * Agent Planner Service
- * Phân tích user query và tạo execution plan với ReAct pattern
- *
- * NEW: Hỗ trợ NO_TOOLS mode cho greetings và general knowledge
+ * Service tạo execution plan từ user query.
+ * Quyết định có cần tools không và tạo danh sách steps.
+ * 
+ * @example
+ * const plan = await agentPlannerService.createPlan(query, context);
+ * if (plan.needsTools) {
+ *   await agentExecutorService.execute(plan);
+ * } else {
+ *   return plan.directAnswer;
+ * }
  */
 @Injectable()
 export class AgentPlannerService {
   private readonly logger = new Logger(AgentPlannerService.name);
 
-  constructor(private readonly geminiService: GeminiService) {}
+  /**
+   * @param geminiService - Service gọi Gemini API
+   * @param queryAnalyzer - Service phân tích query
+   */
+  constructor(
+    private readonly geminiService: GeminiService,
+    private readonly queryAnalyzer: QueryAnalyzerService,
+  ) {}
 
   /**
-   * Tạo execution plan từ user query
+   * Tạo execution plan từ user query.
+   * Phân tích query trước, quyết định có cần tools không, sau đó tạo plan.
+   * 
+   * @param query - Câu hỏi từ user
+   * @param context - Context bao gồm conversation history và available tools
+   * @returns Plan với steps (nếu cần tools) hoặc directAnswer (nếu không cần)
    */
   async createPlan(
     query: string,
     context: AgentContext,
-  ): Promise<AgentPlan & { needsTools?: boolean; directAnswer?: string }> {
+  ): Promise<
+    AgentPlan & {
+      needsTools?: boolean;
+      directAnswer?: string;
+      queryAnalysis?: QueryAnalysisResult;
+    }
+  > {
     this.logger.log(`📋 Creating plan for query: "${query}"`);
 
     try {
-      // 1. Build planning prompt
-      const prompt = this.buildPlanningPrompt(query, context);
+      // 1. Phân tích query trước
+      const analysis = await this.queryAnalyzer.analyzeQuery(query, {
+        conversationHistory: context.conversationHistory
+          .filter((m) => m.role !== 'system')
+          .map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+      });
 
-      // 2. Ask Gemini to create plan
+      this.logger.log(
+        `🔍 Query analysis: ${analysis.mainIntent.type} (confidence: ${analysis.confidence.toFixed(2)}), complexity: ${analysis.complexity.level}`,
+      );
+
+      // 2. Handle greetings/general knowledge trực tiếp
+      if (
+        analysis.mainIntent.type === IntentType.GREETING ||
+        analysis.mainIntent.type === IntentType.GENERAL_KNOWLEDGE
+      ) {
+        this.logger.log(`✅ Direct answer mode (${analysis.mainIntent.type})`);
+        const directAnswer = await this.geminiService.generateResponse(
+          query,
+          'Trả lời ngắn gọn, thân thiện bằng tiếng Việt.',
+        );
+        return {
+          goal: 'Trả lời trực tiếp',
+          steps: [],
+          estimatedTokens: 100,
+          createdAt: new Date(),
+          needsTools: false,
+          directAnswer,
+          queryAnalysis: analysis,
+        };
+      }
+
+      // 3. Build planning prompt với analysis insights
+      const prompt = this.buildPlanningPrompt(query, context, analysis);
+
+      // 4. Yêu cầu Gemini tạo plan
       const response = await this.geminiService.generateResponse(
         prompt,
         this.getPlanningSystemPrompt(),
       );
 
-      // 3. Parse response
+      // 5. Parse response
       const parsed = this.parseResponse(response, query);
 
-      // 4. Handle NO_TOOLS mode
+      // 6. Handle NO_TOOLS mode (fallback)
       if (parsed.needsTools === false && parsed.directAnswer) {
         this.logger.log(`✅ Direct answer mode (no tools needed)`);
         return {
@@ -51,28 +132,33 @@ export class AgentPlannerService {
           createdAt: new Date(),
           needsTools: false,
           directAnswer: parsed.directAnswer,
+          queryAnalysis: analysis,
         };
       }
 
-      // 5. Normal mode with tools
+      // 7. Normal mode với tools
       const plan = this.parsePlanFromResponse(parsed, query);
 
       this.logger.log(
         `✅ Plan created with ${plan.steps.length} steps for goal: "${plan.goal}"`,
       );
 
-      return { ...plan, needsTools: true };
+      return { ...plan, needsTools: true, queryAnalysis: analysis };
     } catch (error) {
       this.logger.error(`Failed to create plan: ${error.message}`);
-      // Fallback: Create simple plan
       return this.createFallbackPlan(query, context);
     }
   }
 
   /**
-   * Build planning prompt cho Gemini (with NO_TOOLS support)
+   * Tạo planning prompt cho Gemini.
+   * Bao gồm query analysis insights để tạo plan chính xác hơn.
    */
-  private buildPlanningPrompt(query: string, context: AgentContext): string {
+  private buildPlanningPrompt(
+    query: string,
+    context: AgentContext,
+    analysis?: QueryAnalysisResult,
+  ): string {
     const toolsList = context.availableTools
       .map(
         (t) =>
@@ -85,21 +171,34 @@ export class AgentPlannerService {
         ? `\n\nConversation History (last ${context.conversationHistory.length} messages):\n${context.conversationHistory.map((m) => `${m.role}: ${m.content}`).join('\n')}`
         : '';
 
+    const analysisContext = analysis
+      ? `
+
+QUERY ANALYSIS (pre-processed):
+- Main Intent: ${analysis.mainIntent.type} (confidence: ${analysis.mainIntent.confidence.toFixed(2)})
+- Complexity: ${analysis.complexity.level} (score: ${analysis.complexity.score})
+- Entities Detected: ${analysis.entities.map((e) => `${e.type}=${e.value}`).join(', ') || 'none'}
+- Suggested Tools: ${analysis.suggestedTools.join(', ') || 'auto-detect'}
+${analysis.ambiguities && analysis.ambiguities.length > 0 ? `- Ambiguities: ${analysis.ambiguities.join(', ')}` : ''}
+`
+      : '';
+
     return `
-Phân tích user query sau và quyết định cách xử lý:
+Phân tích user query sau và tạo execution plan:
 
 USER QUERY: "${query}"
 ${conversationContext}
+${analysisContext}
 
 AVAILABLE TOOLS:
 ${toolsList}
 
-⚠️ DECISION FIRST - CÓ CẦN TOOLS KHÔNG?
+⚠️ DECISION - CẦN TOOLS KHÔNG?
 
 **KHÔNG CẦN TOOLS** (trả lời trực tiếp) nếu:
 1. Greetings: "xin chào", "hello", "chào bạn", "hi"
 2. Thanks: "cảm ơn", "thank you", "thanks"
-3. General knowledge: "React là g㧔", "Lập trình là gì?"
+3. General knowledge: "React là gì?", "Lập trình là gì?"
 4. Casual chat: không liên quan đến data công ty
 
 **CẦN TOOLS** nếu:
@@ -139,7 +238,7 @@ LUÔN trả về JSON hợp lệ, KHÔNG markdown.
   }
 
   /**
-   * System prompt cho planning
+   * System prompt cho việc tạo plan.
    */
   private getPlanningSystemPrompt(): string {
     return `
@@ -158,11 +257,14 @@ LUÔN trả về JSON, KHÔNG thêm markdown backticks.
   }
 
   /**
-   * Parse Gemini response
+   * Parse response JSON từ Gemini.
+   * 
+   * @param response - Raw response từ Gemini
+   * @param originalQuery - Query gốc (để fallback)
+   * @returns Parsed JSON object
    */
   private parseResponse(response: string, originalQuery: string): any {
     try {
-      // Clean response
       let cleanResponse = response.trim();
       if (cleanResponse.startsWith('```json')) {
         cleanResponse = cleanResponse
@@ -180,7 +282,12 @@ LUÔN trả về JSON, KHÔNG thêm markdown backticks.
   }
 
   /**
-   * Parse plan từ response (for tools mode)
+   * Parse plan từ response khi cần tools.
+   * Validate structure và enforce max steps.
+   * 
+   * @param parsed - Parsed JSON từ Gemini
+   * @param originalQuery - Query gốc
+   * @returns AgentPlan với steps
    */
   private parsePlanFromResponse(parsed: any, originalQuery: string): AgentPlan {
     try {
@@ -223,7 +330,12 @@ LUÔN trả về JSON, KHÔNG thêm markdown backticks.
   }
 
   /**
-   * Fallback plan khi có lỗi
+   * Tạo fallback plan khi có lỗi.
+   * Xử lý greetings đặc biệt hoặc sử dụng tool mặc định.
+   * 
+   * @param query - Query gốc
+   * @param context - Context
+   * @returns Fallback plan
    */
   private createFallbackPlan(
     query: string,
@@ -231,7 +343,6 @@ LUÔN trả về JSON, KHÔNG thêm markdown backticks.
   ): AgentPlan & { needsTools?: boolean; directAnswer?: string } {
     this.logger.warn('Creating fallback plan');
 
-    // Check if greeting
     const lowerQuery = query.toLowerCase();
     if (
       lowerQuery.includes('xin chào') ||
@@ -250,7 +361,6 @@ LUÔN trả về JSON, KHÔNG thêm markdown backticks.
       };
     }
 
-    // Default: try to use a tool
     return {
       goal: `Trả lời: ${query}`,
       steps: [

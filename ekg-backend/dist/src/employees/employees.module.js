@@ -11,12 +11,16 @@ const common_1 = require("@nestjs/common");
 const employees_service_1 = require("./employees.service");
 const employees_controller_1 = require("./employees.controller");
 const neo4j_module_1 = require("../core/neo4j/neo4j.module");
+const graph_module_1 = require("../graph/graph.module");
 let EmployeesModule = class EmployeesModule {
 };
 exports.EmployeesModule = EmployeesModule;
 exports.EmployeesModule = EmployeesModule = __decorate([
     (0, common_1.Module)({
-        imports: [neo4j_module_1.Neo4jModule],
+        imports: [
+            neo4j_module_1.Neo4jModule,
+            graph_module_1.GraphModule,
+        ],
         controllers: [employees_controller_1.EmployeesController],
         providers: [employees_service_1.EmployeesService],
         exports: [employees_service_1.EmployeesService],

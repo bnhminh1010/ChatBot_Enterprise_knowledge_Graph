@@ -18,20 +18,33 @@ let OllamaRAGService = OllamaRAGService_1 = class OllamaRAGService {
     ollamaService;
     chromaDBService;
     logger = new common_1.Logger(OllamaRAGService_1.name);
+    TOP_K_CANDIDATES = parseInt(process.env.RAG_TOP_K_CANDIDATES || '20');
+    TOP_K_FINAL = parseInt(process.env.RAG_TOP_K_FINAL || '5');
+    VECTOR_WEIGHT = parseFloat(process.env.HYBRID_VECTOR_WEIGHT || '0.7');
+    KEYWORD_WEIGHT = parseFloat(process.env.HYBRID_KEYWORD_WEIGHT || '0.3');
     constructor(ollamaService, chromaDBService) {
         this.ollamaService = ollamaService;
         this.chromaDBService = chromaDBService;
     }
-    async queryWithRAG(query, collectionName = 'employees', topK = 10, conversationHistory) {
+    async queryWithRAG(query, collectionName = 'employees', topK, conversationHistory) {
         try {
-            const searchResults = await this.chromaDBService.search(collectionName, query, topK);
-            if (searchResults.length === 0) {
+            this.logger.debug(`Stage 1: Hybrid search for top-${this.TOP_K_CANDIDATES} candidates`);
+            const candidates = await this.chromaDBService.hybridSearch(collectionName, query, this.TOP_K_CANDIDATES, {
+                vectorWeight: this.VECTOR_WEIGHT,
+                keywordWeight: this.KEYWORD_WEIGHT,
+            });
+            if (candidates.length === 0) {
                 return 'Xin lỗi, không tìm thấy thông tin liên quan trong hệ thống.';
             }
-            const contextText = this.buildContext(searchResults);
+            this.logger.debug('Stage 2: Re-ranking candidates');
+            const reranked = this.rerankResults(candidates, query, conversationHistory);
+            this.logger.debug('Stage 3: Diversity filtering');
+            const diverse = this.diversityFilter(reranked, topK || this.TOP_K_FINAL);
+            this.logger.debug('Stage 4: Generating response');
+            const contextText = this.buildContext(diverse);
             const prompt = this.buildPrompt(query, contextText, conversationHistory);
-            const response = await this.ollamaService.generateResponse(prompt, 'llama3.1');
-            this.logger.debug(`RAG query completed: ${query.substring(0, 50)}...`);
+            const response = await this.ollamaService.generateResponse(prompt, 'qwen2.5:7b');
+            this.logger.debug(`RAG completed: ${diverse.length} contexts used for "${query.substring(0, 40)}..."`);
             return response;
         }
         catch (error) {
@@ -39,6 +52,74 @@ let OllamaRAGService = OllamaRAGService_1 = class OllamaRAGService {
             const searchResults = await this.chromaDBService.search(collectionName, query, 5);
             return this.formatSearchResults(searchResults);
         }
+    }
+    rerankResults(results, query, conversationHistory) {
+        const queryLower = query.toLowerCase();
+        const queryKeywords = queryLower.split(/\s+/);
+        return results
+            .map((result) => {
+            let rerankScore = result.similarity;
+            const contentLower = result.content.toLowerCase();
+            const keywordMatches = queryKeywords.filter((kw) => contentLower.includes(kw)).length;
+            const keywordBonus = (keywordMatches / queryKeywords.length) * 0.1;
+            rerankScore += keywordBonus;
+            if (result.metadata.timestamp) {
+                const age = Date.now() - new Date(result.metadata.timestamp).getTime();
+                const daysSinceUpdate = age / (1000 * 60 * 60 * 24);
+                const recencyBonus = Math.exp(-daysSinceUpdate / 365) * 0.05;
+                rerankScore += recencyBonus;
+            }
+            if (conversationHistory && conversationHistory.length > 0) {
+                const historyText = conversationHistory
+                    .map((h) => h.content)
+                    .join(' ')
+                    .toLowerCase();
+                const contextKeywords = historyText.split(/\s+/);
+                const contextMatches = contextKeywords.filter((kw) => contentLower.includes(kw)).length;
+                if (contextMatches > 0) {
+                    rerankScore += 0.05;
+                }
+            }
+            return {
+                ...result,
+                rerankScore,
+            };
+        })
+            .sort((a, b) => b.rerankScore - a.rerankScore);
+    }
+    diversityFilter(results, topK) {
+        if (results.length <= topK) {
+            return results;
+        }
+        const selected = [];
+        const remaining = [...results];
+        selected.push(remaining.shift());
+        while (selected.length < topK && remaining.length > 0) {
+            let maxDiversity = -1;
+            let maxIndex = 0;
+            for (let i = 0; i < remaining.length; i++) {
+                const candidate = remaining[i];
+                let minSimilarity = 1.0;
+                for (const selectedItem of selected) {
+                    const similarity = this.textSimilarity(candidate.content, selectedItem.content);
+                    minSimilarity = Math.min(minSimilarity, similarity);
+                }
+                const diversityScore = candidate.rerankScore * 0.7 + (1 - minSimilarity) * 0.3;
+                if (diversityScore > maxDiversity) {
+                    maxDiversity = diversityScore;
+                    maxIndex = i;
+                }
+            }
+            selected.push(remaining.splice(maxIndex, 1)[0]);
+        }
+        return selected;
+    }
+    textSimilarity(text1, text2) {
+        const words1 = new Set(text1.toLowerCase().split(/\s+/));
+        const words2 = new Set(text2.toLowerCase().split(/\s+/));
+        const intersection = new Set([...words1].filter((word) => words2.has(word)));
+        const union = new Set([...words1, ...words2]);
+        return intersection.size / union.size;
     }
     buildContext(results) {
         return results
@@ -61,7 +142,7 @@ ${context}`;
             prompt += `
 
 CONVERSATION HISTORY:
-${conversationHistory.map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}`;
+${conversationHistory.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}`;
         }
         prompt += `
 
@@ -83,13 +164,15 @@ ANSWER (in Vietnamese):`;
         if (results.length === 0) {
             return 'Không tìm thấy kết quả phù hợp.';
         }
-        const items = results.map((r, idx) => {
+        const items = results
+            .map((r, idx) => {
             const metadata = r.metadata || {};
             return `${idx + 1}. ${metadata.name || 'Unknown'}
    Độ liên quan: ${(r.similarity * 100).toFixed(1)}%
    ${metadata.role ? `Vị trí: ${metadata.role}` : ''}
    ${metadata.department ? `Phòng ban: ${metadata.department}` : ''}`;
-        }).join('\n\n');
+        })
+            .join('\n\n');
         return `Tìm thấy ${results.length} kết quả:\n\n${items}`;
     }
     async isAvailable() {

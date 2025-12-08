@@ -145,6 +145,10 @@ let S3Service = S3Service_1 = class S3Service {
             return buffer;
         }
         catch (error) {
+            if (error?.name === 'NoSuchKey' || error?.Code === 'NoSuchKey') {
+                this.logger.warn(`S3 object not found: ${key}`);
+                throw new common_1.NotFoundException(`File không tồn tại trong S3: ${key}. File có thể đã bị xóa hoặc chưa được upload.`);
+            }
             this.logger.error(`Failed to get object from S3: ${error}`);
             throw new common_1.InternalServerErrorException('Failed to download file from S3');
         }

@@ -41,55 +41,57 @@ NHIỆM VỤ:
 3. Trích xuất entities (department, skill, project, position, name, experience, id)
 4. Xác định loại query cụ thể
 
+⚠️ **CRITICAL PRIORITY RULES** - Kiểm tra ĐẦU TIÊN trước khi apply SIMPLE/MEDIUM/COMPLEX:
+
+🔴 NẾU câu hỏi có BẤT KỲ filter/condition keywords sau → LUÔN LÀ MEDIUM filter-search:
+   - Keywords kỹ năng: "biết", "có kỹ năng", "thành thạo", "giỏi", "skill", "sử dụng" + tên công nghệ (React, Python, Java, Docker...)
+   - Keywords phòng ban: "phòng", "department", "team", "bộ phận" + tên (Frontend, Backend, QA, DevOps...)
+   - Keywords chức danh: "chức danh", "position", "vị trí", "cấp bậc" + level (Junior, Senior, Lead, Manager...)
+   - Keywords dự án: "dự án", "project", "làm việc tại", "tham gia" + tên dự án
+   
+   VD CRITICAL:
+   ✅ ĐÚNG: "Danh sách nhân viên biết React" → MEDIUM filter-search với skill="React"
+   ✅ ĐÚNG: "Ai biến Python" → MEDIUM filter-search với skill="Python"
+   ✅ ĐÚNG: "Nhân viên phòng Frontend" → MEDIUM filter-search với department="Frontend"
+   ❌ SAI: "Danh sách nhân viên" (không có filter) → SIMPLE list-employees
+
 CLASSIFICATION RULES:
 
-**SIMPLE** (queries đơn giản, chỉ cần query database trực tiếp):
-- Liệt kê danh sách: "Danh sách nhân viên", "List departments", "Tất cả dự án", "Danh sách nhóm", "Các đơn vị", "Danh sách công nghệ", "Các chức danh", "Danh sách địa điểm", "Thông tin công ty"
-  → type: list-employees, list-departments, list-projects, list-skills, list-groups, list-units, list-documents, list-technologies, list-positions, list-locations, list-companies
-- Tìm theo ID/code: "Mã NV001", "ID: DP02", "Employee E001", "Tên của nhân viên có id là NS021"
+**SIMPLE** (queries đơn giản, KHÔNG CÓ filter/condition):
+- Liệt kê TẤT CẢ không filter: "Danh sách nhân viên", "Tất cả dự án", "List all departments"
+  → type: list-employees, list-departments, list-projects, list-skills
+- Tìm theo ID: "Mã NV001", "ID: DP02", "Nhân viên NS021"
   → type: get-by-id
-- Đếm số lượng đơn giản: "Bao nhiêu nhân viên", "Số lượng phòng ban", "Có bao nhiêu nhóm"
+- Đếm tổng: "Bao nhiêu nhân viên", "Số lượng phòng ban"  
   → type: count-simple
-- Tìm kiếm global đơn giản: "Tìm Nguyễn Văn A"
-  → type: search-global
 
-**MEDIUM** (queries phức tạp hơn, cần filter, semantic search hoặc vector search):
-- Tìm kiếm theo filter: "Nhân viên phòng Frontend", "Người có kỹ năng Python", "Nhóm thuộc đơn vị X"
+**MEDIUM** (queries có filter, semantic search hoặc vector search):
+- Tìm kiếm theo filter: "Nhân viên phòng Frontend", "Người có kỹ năng Python", "Ai biết React"
   → type: filter-search
 - Semantic search: "Ai giỏi về React", "Người thành thạo Machine Learning"
   → type: semantic-search
-- Relationship queries: "Ai làm việc cùng X", "Team của dự án Y", "Nhóm này có những ai"
+- Relationship queries: "Ai làm việc cùng X", "Team của dự án Y"
   → type: relationship-query
-- Aggregation với điều kiện: "Bao nhiêu người có kinh nghiệm > 3 năm"
+- Aggregation có điều kiện: "Bao nhiêu người có kinh nghiệm > 3 năm"
   → type: conditional-aggregate
-- So sánh đơn giản: "Phòng nào có nhiều người nhất"
-  → type: comparison-simple
 
-**COMPLEX** (queries yêu cầu phân tích, reasoning, hoặc multi-step):
+**COMPLEX** (queries yêu cầu phân tích, reasoning, multi-step):
 - Phân tích: "Phân tích kỹ năng của team Frontend"
   → type: analysis
 - Đề xuất: "Đề xuất training plan cho Backend team"
   → type: recommendation
 - Multi-step reasoning: "Nếu thêm 5 người vào Frontend thì cần kỹ năng gì"
   → type: multi-step-reasoning
-- So sánh phức tạp: "So sánh năng lực 2 team và đề xuất"
-  → type: complex-comparison
-- Câu hỏi mở: "Làm thế nào để cải thiện productivity"
-  → type: open-ended
 
 ENTITIES:
+- skill: Tên kỹ năng/công nghệ (Python, React, Java, Docker, etc.)
 - department: Tên phòng ban (Frontend, Backend, QA, DevOps, HR, etc.)
-- skill: Tên kỹ năng (Python, React, Java, Docker, etc.)
 - project: Tên dự án
 - position: Chức danh (Junior, Senior, Lead, Manager, etc.)
 - employeeName: Tên nhân viên cụ thể
-- group: Tên nhóm (Nhom)
-- unit: Tên đơn vị (DonVi)
-- document: Tên tài liệu (TaiLieu)
-- technology: Tên công nghệ (CongNghe)
-- id: Mã định danh (ID, Code) của đối tượng (VD: NS021, DP01, ...)
-- experience: Số năm kinh nghiệm (nếu có)
-- count: true nếu câu hỏi yêu cầu đếm số lượng
+- id: Mã định danh
+- experience: Số năm kinh nghiệm
+- count: true nếu yêu cầu đếm
 
 USER QUERY: "${query}"
 
@@ -104,10 +106,6 @@ Trả về JSON hợp lệ (chỉ JSON, không có markdown):
     "project": "...",
     "position": "...",
     "employeeName": "...",
-    "group": "...",
-    "unit": "...",
-    "document": "...",
-    "technology": "...",
     "id": "...",
     "experience": số nguyên,
     "count": true/false

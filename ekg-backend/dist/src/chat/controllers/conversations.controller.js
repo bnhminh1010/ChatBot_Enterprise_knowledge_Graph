@@ -34,7 +34,8 @@ let ConversationsController = ConversationsController_1 = class ConversationsCon
                 return {
                     ...conv,
                     title: firstUserMessage
-                        ? firstUserMessage.content.slice(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
+                        ? firstUserMessage.content.slice(0, 50) +
+                            (firstUserMessage.content.length > 50 ? '...' : '')
                         : 'New Chat',
                 };
             });

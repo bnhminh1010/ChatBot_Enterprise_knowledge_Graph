@@ -15,28 +15,34 @@ const common_1 = require("@nestjs/common");
 const generative_ai_1 = require("@google/generative-ai");
 let GeminiService = GeminiService_1 = class GeminiService {
     logger = new common_1.Logger(GeminiService_1.name);
+    DEFAULT_MODEL = 'gemini-2.5-pro';
     client;
     model;
+    activeModelName;
     constructor() {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
             throw new Error('GEMINI_API_KEY is not defined in environment variables');
         }
-        const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+        const modelName = process.env.GEMINI_MODEL || this.DEFAULT_MODEL;
+        this.activeModelName = modelName;
         this.client = new generative_ai_1.GoogleGenerativeAI(apiKey);
         try {
             this.model = this.client.getGenerativeModel({ model: modelName });
-            this.logger.log(`Gemini service initialized with model: ${modelName}`);
+            this.logger.log(`Gemini service initialized with model: ${this.activeModelName}`);
         }
         catch (error) {
             const errorMsg = error?.message || 'Unknown error';
             this.logger.error(`Failed to initialize Gemini model "${modelName}": ${errorMsg}`);
-            if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('invalid')) {
-                const fallbackModel = 'gemini-1.5-flash';
+            if (errorMsg.includes('not found') ||
+                errorMsg.includes('404') ||
+                errorMsg.includes('invalid')) {
+                const fallbackModel = this.DEFAULT_MODEL;
                 this.logger.warn(`Trying fallback model: ${fallbackModel}`);
                 try {
                     this.model = this.client.getGenerativeModel({ model: fallbackModel });
-                    this.logger.log(`Gemini service initialized with fallback model: ${fallbackModel}`);
+                    this.activeModelName = fallbackModel;
+                    this.logger.log(`Gemini service initialized with fallback model: ${this.activeModelName}`);
                 }
                 catch (fallbackError) {
                     throw new Error(`Failed to initialize Gemini with both ${modelName} and ${fallbackModel}: ${errorMsg}`);
@@ -49,9 +55,7 @@ let GeminiService = GeminiService_1 = class GeminiService {
     }
     async generateResponse(prompt, context) {
         try {
-            const fullPrompt = context
-                ? `${context}\n\nQuestion: ${prompt}`
-                : prompt;
+            const fullPrompt = context ? `${context}\n\nQuestion: ${prompt}` : prompt;
             const result = await this.model.generateContent(fullPrompt);
             if (!result || !result.response) {
                 throw new Error('Invalid response from Gemini API: response is null or undefined');
@@ -77,17 +81,22 @@ let GeminiService = GeminiService_1 = class GeminiService {
             this.logger.error(`Failed to generate response from Gemini: ${errorMessage}`, {
                 status: errorStatus,
                 details: errorDetails,
-                model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+                model: this.activeModelName,
                 stack: error?.stack,
             });
             if (errorStatus === 400 || errorMessage.includes('400')) {
-                throw new Error(`Gemini API Error: Invalid request. Model "${process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'}" may not be available. ${errorMessage}`);
+                throw new Error(`Gemini API Error: Invalid request. Model "${this.activeModelName}" may not be available. ${errorMessage}`);
             }
-            else if (errorStatus === 401 || errorStatus === 403 || errorMessage.includes('401') || errorMessage.includes('403')) {
+            else if (errorStatus === 401 ||
+                errorStatus === 403 ||
+                errorMessage.includes('401') ||
+                errorMessage.includes('403')) {
                 throw new Error(`Gemini API Error: Authentication failed. Please check your API key. ${errorMessage}`);
             }
-            else if (errorStatus === 404 || errorMessage.includes('404') || errorMessage.includes('not found')) {
-                throw new Error(`Gemini API Error: Model "${process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'}" not found. Please check model name. ${errorMessage}`);
+            else if (errorStatus === 404 ||
+                errorMessage.includes('404') ||
+                errorMessage.includes('not found')) {
+                throw new Error(`Gemini API Error: Model "${this.activeModelName}" not found. Please check model name. ${errorMessage}`);
             }
             else if (errorStatus === 429 || errorMessage.includes('429')) {
                 throw new Error(`Gemini API Error: Rate limit exceeded. Please try again later.`);
@@ -99,6 +108,9 @@ let GeminiService = GeminiService_1 = class GeminiService {
                 throw new Error(`Failed to generate response from Gemini API: ${errorMessage}`);
             }
         }
+    }
+    async classifyQuery(prompt) {
+        return this.generateResponse(prompt);
     }
     async generateResponseWithHistory(currentMessage, conversationHistory, databaseContext) {
         try {
@@ -122,7 +134,14 @@ let GeminiService = GeminiService_1 = class GeminiService {
 - Nếu câu hỏi không liên quan đến dữ liệu doanh nghiệp, lịch sự từ chối và hướng dẫn sử dụng đúng`;
             const messages = [
                 { role: 'user', parts: [{ text: systemPrompt }] },
-                { role: 'model', parts: [{ text: 'Tôi hiểu. Tôi sẽ hỗ trợ bạn tra cứu thông tin doanh nghiệp một cách chính xác và chuyên nghiệp.' }] },
+                {
+                    role: 'model',
+                    parts: [
+                        {
+                            text: 'Tôi hiểu. Tôi sẽ hỗ trợ bạn tra cứu thông tin doanh nghiệp một cách chính xác và chuyên nghiệp.',
+                        },
+                    ],
+                },
             ];
             for (const msg of conversationHistory) {
                 messages.push({
@@ -182,9 +201,7 @@ let GeminiService = GeminiService_1 = class GeminiService {
     }
     async streamResponse(prompt, context) {
         try {
-            const fullPrompt = context
-                ? `${context}\n\nQuestion: ${prompt}`
-                : prompt;
+            const fullPrompt = context ? `${context}\n\nQuestion: ${prompt}` : prompt;
             const stream = await this.model.generateContentStream(fullPrompt);
             return stream;
         }
@@ -245,17 +262,42 @@ Return only the category name.`;
                     functionDeclarations: tools,
                 },
             ];
+            let validHistory = history.map((msg) => ({
+                role: msg.role === 'assistant' ? 'model' : msg.role,
+                parts: [{ text: msg.content }],
+            }));
+            while (validHistory.length > 0 && validHistory[0].role === 'model') {
+                validHistory = validHistory.slice(1);
+            }
             const chat = this.model.startChat({
                 tools: toolsConfig,
-                history: history.map((msg) => ({
-                    role: msg.role === 'assistant' ? 'model' : msg.role,
-                    parts: [{ text: msg.content }],
-                })),
+                history: validHistory,
             });
             const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
-            const result = await chat.sendMessage(fullPrompt);
-            const response = result.response;
-            const functionCalls = response.functionCalls();
+            let result;
+            let response;
+            try {
+                result = await chat.sendMessage(fullPrompt);
+                response = result.response;
+            }
+            catch (sendError) {
+                if (sendError.message?.includes('model output must contain either output text or tool calls') ||
+                    sendError.message?.includes('empty')) {
+                    this.logger.warn(`Gemini returned empty response: ${sendError.message}`);
+                    return {
+                        type: 'text',
+                        content: 'Xin lỗi, tôi không thể xử lý yêu cầu này lúc này. Vui lòng thử lại với câu hỏi đơn giản hơn.',
+                    };
+                }
+                throw sendError;
+            }
+            let functionCalls;
+            try {
+                functionCalls = response.functionCalls();
+            }
+            catch (e) {
+                functionCalls = null;
+            }
             if (functionCalls && functionCalls.length > 0) {
                 return {
                     type: 'function_call',
@@ -263,26 +305,93 @@ Return only the category name.`;
                     chatSession: chat,
                 };
             }
+            let textContent = '';
+            try {
+                textContent = response.text();
+            }
+            catch (textError) {
+                this.logger.warn(`response.text() failed: ${textError.message}`);
+                return {
+                    type: 'text',
+                    content: 'Xin lỗi, tôi không thể xử lý yêu cầu này lúc này. Vui lòng thử lại sau.',
+                };
+            }
+            if (!textContent || textContent.trim().length === 0) {
+                this.logger.warn('Empty text response from Gemini, using fallback');
+                return {
+                    type: 'text',
+                    content: 'Xin lỗi, tôi không thể xử lý yêu cầu này. Vui lòng thử lại.',
+                };
+            }
             return {
                 type: 'text',
-                content: response.text(),
+                content: textContent,
             };
         }
         catch (error) {
             this.logger.error(`Failed to generate response with tools: ${error.message}`);
+            if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('Too Many Requests')) {
+                throw error;
+            }
+            if (error.message?.includes('empty')) {
+                return {
+                    type: 'text',
+                    content: 'Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau.',
+                };
+            }
             throw error;
         }
     }
     async continueChatWithToolResults(chatSession, toolResults) {
         try {
-            const result = await chatSession.sendMessage(toolResults.map((r) => ({
-                functionResponse: {
-                    name: r.name,
-                    response: r.result,
-                },
-            })));
-            const response = result.response;
-            const functionCalls = response.functionCalls();
+            let result;
+            let response;
+            try {
+                result = await chatSession.sendMessage(toolResults.map((r) => ({
+                    functionResponse: {
+                        name: r.name,
+                        response: r.result,
+                    },
+                })));
+                response = result.response;
+            }
+            catch (sendError) {
+                if (sendError.message?.includes('model output must contain either output text or tool calls') ||
+                    sendError.message?.includes('empty')) {
+                    this.logger.warn(`Gemini returned empty response after tools: ${sendError.message}`);
+                    const fallbackContent = toolResults
+                        .map((r) => {
+                        if (r.result?.data) {
+                            if (Array.isArray(r.result.data)) {
+                                return r.result.data
+                                    .map((item) => item.ten || item.name || JSON.stringify(item))
+                                    .join(', ');
+                            }
+                            return (r.result.data.ten ||
+                                r.result.data.name ||
+                                JSON.stringify(r.result.data));
+                        }
+                        if (r.result?.message) {
+                            return r.result.message;
+                        }
+                        return JSON.stringify(r.result);
+                    })
+                        .filter(Boolean)
+                        .join('\n');
+                    return {
+                        type: 'text',
+                        content: fallbackContent || 'Đã tìm kiếm nhưng không có kết quả phù hợp.',
+                    };
+                }
+                throw sendError;
+            }
+            let functionCalls;
+            try {
+                functionCalls = response.functionCalls();
+            }
+            catch (e) {
+                functionCalls = null;
+            }
             if (functionCalls && functionCalls.length > 0) {
                 return {
                     type: 'function_call',
@@ -290,13 +399,63 @@ Return only the category name.`;
                     chatSession: chatSession,
                 };
             }
+            let textContent = '';
+            try {
+                textContent = response.text();
+            }
+            catch (textError) {
+                this.logger.warn(`response.text() after tools failed: ${textError.message}`);
+                const fallbackContent = toolResults
+                    .map((r) => {
+                    if (r.result?.data) {
+                        return JSON.stringify(r.result.data, null, 2);
+                    }
+                    if (r.result?.message) {
+                        return r.result.message;
+                    }
+                    return JSON.stringify(r.result);
+                })
+                    .join('\n');
+                return {
+                    type: 'text',
+                    content: fallbackContent || 'Đã thực hiện xong nhưng không có kết quả.',
+                };
+            }
+            if (!textContent || textContent.trim().length === 0) {
+                this.logger.warn('Empty response after tool execution, using tool results as fallback');
+                const fallbackContent = toolResults
+                    .map((r) => {
+                    if (r.result?.data) {
+                        return JSON.stringify(r.result.data, null, 2);
+                    }
+                    if (r.result?.message) {
+                        return r.result.message;
+                    }
+                    return JSON.stringify(r.result);
+                })
+                    .join('\n');
+                return {
+                    type: 'text',
+                    content: fallbackContent ||
+                        'Đã thực hiện xong nhưng không có kết quả để hiển thị.',
+                };
+            }
             return {
                 type: 'text',
-                content: response.text(),
+                content: textContent,
             };
         }
         catch (error) {
             this.logger.error(`Failed to continue chat with tool results: ${error.message}`);
+            if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('Too Many Requests')) {
+                throw error;
+            }
+            if (error.message?.includes('empty')) {
+                return {
+                    type: 'text',
+                    content: 'Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau.',
+                };
+            }
             throw error;
         }
     }

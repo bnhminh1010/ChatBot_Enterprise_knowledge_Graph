@@ -12,10 +12,10 @@ var ChatService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatService = void 0;
 const common_1 = require("@nestjs/common");
-const query_classifier_service_1 = require("../ai/query-classifier.service");
 const ollama_service_1 = require("../ai/ollama.service");
 const chroma_db_service_1 = require("../ai/chroma-db.service");
 const gemini_service_1 = require("../ai/gemini.service");
+const openrouter_service_1 = require("../ai/openrouter.service");
 const employees_service_1 = require("../employees/employees.service");
 const skills_service_1 = require("../skills/skills.service");
 const departments_service_1 = require("../departments/departments.service");
@@ -27,11 +27,16 @@ const ollama_rag_service_1 = require("./services/ollama-rag.service");
 const gemini_tools_service_1 = require("../ai/gemini-tools.service");
 const positions_service_1 = require("../positions/positions.service");
 const technologies_service_1 = require("../technologies/technologies.service");
+const upload_intent_handler_service_1 = require("./services/upload-intent-handler.service");
+const context_compression_service_1 = require("./services/context-compression.service");
+const user_preference_service_1 = require("./services/user-preference.service");
+const suggested_questions_service_1 = require("./services/suggested-questions.service");
+const database_context_service_1 = require("./services/database-context.service");
 let ChatService = ChatService_1 = class ChatService {
-    queryClassifier;
     ollamaService;
     chromaDBService;
     geminiService;
+    openRouterService;
     employeesService;
     skillsService;
     departmentsService;
@@ -43,12 +48,17 @@ let ChatService = ChatService_1 = class ChatService {
     geminiToolsService;
     positionsService;
     technologiesService;
+    uploadIntentHandler;
+    contextCompressionService;
+    userPreferenceService;
+    suggestedQuestionsService;
+    databaseContextService;
     logger = new common_1.Logger(ChatService_1.name);
-    constructor(queryClassifier, ollamaService, chromaDBService, geminiService, employeesService, skillsService, departmentsService, projectsService, searchService, conversationHistoryService, redisConversationService, ollamaRAGService, geminiToolsService, positionsService, technologiesService) {
-        this.queryClassifier = queryClassifier;
+    constructor(ollamaService, chromaDBService, geminiService, openRouterService, employeesService, skillsService, departmentsService, projectsService, searchService, conversationHistoryService, redisConversationService, ollamaRAGService, geminiToolsService, positionsService, technologiesService, uploadIntentHandler, contextCompressionService, userPreferenceService, suggestedQuestionsService, databaseContextService) {
         this.ollamaService = ollamaService;
         this.chromaDBService = chromaDBService;
         this.geminiService = geminiService;
+        this.openRouterService = openRouterService;
         this.employeesService = employeesService;
         this.skillsService = skillsService;
         this.departmentsService = departmentsService;
@@ -60,20 +70,24 @@ let ChatService = ChatService_1 = class ChatService {
         this.geminiToolsService = geminiToolsService;
         this.positionsService = positionsService;
         this.technologiesService = technologiesService;
+        this.uploadIntentHandler = uploadIntentHandler;
+        this.contextCompressionService = contextCompressionService;
+        this.userPreferenceService = userPreferenceService;
+        this.suggestedQuestionsService = suggestedQuestionsService;
+        this.databaseContextService = databaseContextService;
     }
     async processQuery(message, conversationId, userId) {
         const startTime = Date.now();
         try {
             let activeConversationId = conversationId;
-            if (userId) {
-                try {
-                    activeConversationId =
-                        await this.redisConversationService.getOrCreateConversation(userId, conversationId);
-                    this.logger.debug(`Using conversation: ${activeConversationId}`);
-                }
-                catch (error) {
-                    this.logger.warn(`Could not create/get conversation: ${error}`);
-                }
+            try {
+                const effectiveUserId = userId || 'anonymous';
+                activeConversationId =
+                    await this.redisConversationService.getOrCreateConversation(effectiveUserId, conversationId);
+                this.logger.debug(`Using conversation: ${activeConversationId}`);
+            }
+            catch (error) {
+                this.logger.warn(`Could not create/get conversation: ${error}`);
             }
             if (activeConversationId) {
                 try {
@@ -84,6 +98,25 @@ let ChatService = ChatService_1 = class ChatService {
                 }
             }
             let response = '';
+            if (this.uploadIntentHandler.hasUploadIntent(message)) {
+                this.logger.log('🔍 Detected upload intent');
+                const uploadResponse = await this.uploadIntentHandler.handleUploadIntent(message);
+                if (uploadResponse) {
+                    const responseStr = uploadResponse.type === 'upload_prompt'
+                        ? JSON.stringify(uploadResponse)
+                        : uploadResponse.content;
+                    if (activeConversationId) {
+                        await this.redisConversationService.addMessage(activeConversationId, 'assistant', responseStr);
+                    }
+                    return {
+                        response: responseStr,
+                        queryType: 'upload_intent',
+                        queryLevel: 'simple',
+                        processingTime: Date.now() - startTime,
+                        conversationId: activeConversationId,
+                    };
+                }
+            }
             const employeeNamePattern = /(?:id.*?nhân viên.*?tên|nhân viên.*?tên|tìm.*?nhân viên.*?tên)\s+(.+?)(?:\s*$|\.|\?)/i;
             const nameMatch = message.match(employeeNamePattern);
             if (nameMatch && nameMatch[1]) {
@@ -118,47 +151,74 @@ let ChatService = ChatService_1 = class ChatService {
                 catch (e) {
                 }
             }
-            const classified = this.queryClassifier.classifyQuery(message);
-            this.logger.debug(`Query classified: ${classified.type} (${classified.level})`);
-            if (message.toLowerCase().includes('chức danh') ||
-                message.toLowerCase().includes('vị trí') ||
-                message.toLowerCase().includes('kỹ năng') ||
-                message.toLowerCase().includes('skill') ||
-                message.toLowerCase().includes('danh sách kỹ năng') ||
-                message.toLowerCase().includes('tài liệu') ||
-                message.toLowerCase().includes('lấy tài liệu') ||
-                message.toLowerCase().includes('file') ||
-                classified.type === 'filter-search') {
-                classified.level = 'complex';
-                classified.type = 'tool-enabled-search';
-                this.logger.log(`🔧 Forced complex level for skill/position/filter/document query`);
-            }
-            switch (classified.level) {
-                case 'simple':
-                    response = await this.handleSimpleQuery(classified.type, classified.value);
-                    break;
-                case 'medium':
-                    if (classified.filters &&
-                        Object.keys(classified.filters).length > 0) {
-                        response = await this.handleFilteredQuery(classified.type, classified.filters, message);
+            if (activeConversationId && message.trim().length < 20) {
+                const messageLower = message.toLowerCase().trim();
+                const isConfirmation = [
+                    'có',
+                    'yes',
+                    'ok',
+                    'được',
+                    'đồng ý',
+                    'rồi',
+                ].includes(messageLower);
+                if (isConfirmation) {
+                    try {
+                        const history = await this.redisConversationService.getConversationContext(activeConversationId, 3);
+                        const lastAssistantMsg = history
+                            .reverse()
+                            .find((m) => m.role === 'assistant' && m.content.includes('Bạn có muốn'));
+                        if (lastAssistantMsg) {
+                            this.logger.log('🔄 Detected confirmation for prompt in previous message');
+                            let followUpQuery = '';
+                            if (lastAssistantMsg.content.includes('dự án')) {
+                                const projectMatch = lastAssistantMsg.content.match(/dự án\s+([A-Z0-9]+)/i);
+                                if (projectMatch) {
+                                    followUpQuery = `Thông tin về dự án ${projectMatch[1]}`;
+                                }
+                            }
+                            else if (lastAssistantMsg.content.includes('phòng ban')) {
+                                const deptMatch = lastAssistantMsg.content.match(/phòng\s+(\w+)/i);
+                                if (deptMatch) {
+                                    followUpQuery = `Thông tin phòng ${deptMatch[1]}`;
+                                }
+                            }
+                            else if (lastAssistantMsg.content.includes('nhân viên')) {
+                                const empMatch = lastAssistantMsg.content.match(/nhân viên\s+(.+?)\s+/i);
+                                if (empMatch) {
+                                    followUpQuery = `Thông tin nhân viên ${empMatch[1]}`;
+                                }
+                            }
+                            if (followUpQuery) {
+                                this.logger.log(`📝 Rewriting query: "${message}" → "${followUpQuery}"`);
+                                message = followUpQuery;
+                            }
+                            else {
+                                this.logger.log('Using generic follow-up handler');
+                                message = lastAssistantMsg.content
+                                    .replace(/Bạn có muốn.+?\?/g, '')
+                                    .trim();
+                                if (message.includes('Không tìm thấy')) {
+                                    const entityMatch = message.match(/Không tìm thấy (.+?)\./);
+                                    if (entityMatch) {
+                                        message = `Thông tin về ${entityMatch[1]}`;
+                                    }
+                                }
+                            }
+                        }
                     }
-                    else {
-                        response = await this.handleMediumQuery(classified.type, classified.value, message, activeConversationId);
+                    catch (err) {
+                        this.logger.warn(`Could not process confirmation: ${err}`);
                     }
-                    break;
-                case 'complex':
-                    response = await this.handleComplexQuery(classified.type, classified.value, message, activeConversationId);
-                    break;
-                default:
-                    response =
-                        'Xin lỗi, tôi không hiểu yêu cầu của bạn. Hãy thử các lệnh như "Danh sách nhân viên", "Tìm [tên]", etc.';
+                }
             }
+            this.logger.log('📦 Sending 33 tools to Gemini: universal_search, search_employees_by_name, search_employees_by_level, search_employees_by_email, search_employees_by_phone, search_employees_by_status, get_employee_by_id, count_employees, search_employees_by_department, search_employees_advanced, search_positions_by_name, search_positions_by_level, search_positions_by_group, count_positions, search_departments_by_name, search_departments_by_code, get_department_by_id, count_departments, search_projects_by_name, search_projects_by_client, search_projects_by_status, search_projects_by_field, search_projects_by_type, get_project_by_id, count_projects, get_project_manager, search_technologies_by_name, search_technologies_by_type, count_technologies, list_skills, get_document_content, list_project_documents, search_documents');
+            response = await this.handleComplexQuery('agent-search', undefined, message, activeConversationId, userId);
             const processingTime = Date.now() - startTime;
             if (activeConversationId) {
                 try {
                     await this.redisConversationService.addMessage(activeConversationId, 'assistant', response, {
-                        queryType: classified.type,
-                        queryLevel: classified.level,
+                        queryType: 'agent-search',
+                        queryLevel: 'agent',
                         processingTime,
                     });
                 }
@@ -166,12 +226,24 @@ let ChatService = ChatService_1 = class ChatService {
                     this.logger.warn(`Could not save assistant response: ${error}`);
                 }
             }
+            let suggestedQuestions = [];
+            try {
+                const suggestions = this.suggestedQuestionsService.generateQuickSuggestions('agent-search', []);
+                suggestedQuestions = suggestions.map((s) => ({
+                    question: s.question,
+                    category: s.category,
+                }));
+            }
+            catch (error) {
+                this.logger.warn(`Could not generate suggestions: ${error}`);
+            }
             return {
                 response,
-                queryType: classified.type,
-                queryLevel: classified.level,
+                queryType: 'agent-search',
+                queryLevel: 'agent',
                 processingTime,
                 conversationId: activeConversationId,
+                suggestedQuestions,
             };
         }
         catch (error) {
@@ -302,7 +374,8 @@ let ChatService = ChatService_1 = class ChatService {
                     }
                 }
                 else if (filters.skill) {
-                    employees = await this.employeesService.findBySkill(filters.skill);
+                    const result = await this.employeesService.findBySkill(filters.skill);
+                    employees = result.employees;
                     filterContext = `Kỹ năng: ${filters.skill}`;
                 }
                 else if (filters.project) {
@@ -420,69 +493,142 @@ let ChatService = ChatService_1 = class ChatService {
             throw error;
         }
     }
-    async handleComplexQuery(type, value, message, conversationId) {
+    async handleComplexQuery(type, value, message, conversationId, userId) {
         try {
             let conversationHistory = [];
+            let contextSummary = '';
+            this.logger.debug(`🔍 handleComplexQuery - conversationId: ${conversationId || 'NOT PROVIDED'}`);
             if (conversationId) {
                 try {
-                    const messages = await this.redisConversationService.getConversationContext(conversationId, 10);
-                    conversationHistory = messages
+                    const messages = await this.redisConversationService.getConversationContext(conversationId, 20);
+                    this.logger.debug(`🔍 Got ${messages.length} messages from Redis for conversation ${conversationId}`);
+                    const compressed = await this.contextCompressionService.compressContext(messages);
+                    contextSummary = compressed.summary;
+                    if (compressed.keyEntities.length > 0) {
+                        const entityList = compressed.keyEntities
+                            .slice(0, 5)
+                            .map((e) => `${e.type}: "${e.value}"`)
+                            .join(', ');
+                        contextSummary += `\n🔑 Đã đề cập: ${entityList}`;
+                    }
+                    conversationHistory = compressed.recentMessages
                         .filter((m) => m.role === 'user' || m.role === 'assistant')
                         .map((m) => ({
                         role: m.role,
                         content: m.content,
                     }));
+                    this.logger.debug(`Context compressed: ${messages.length} messages → ` +
+                        `${compressed.recentMessages.length} recent + summary (${compressed.tokenEstimate} tokens)`);
                 }
                 catch (error) {
                     this.logger.warn(`Could not retrieve conversation context: ${error}`);
                 }
             }
+            if (userId) {
+                try {
+                    const topic = type.split('-')[0];
+                    await this.userPreferenceService.recordQuery(userId, message, [], topic);
+                }
+                catch (error) {
+                    this.logger.warn(`Could not record user preference: ${error}`);
+                }
+            }
             const tools = this.geminiToolsService.getTools();
             this.logger.log(`📦 Sending ${tools.length} tools to Gemini: ${tools.map((t) => t.name).join(', ')}`);
-            const context = `Bạn là trợ lý AI cho hệ thống EKG. 
+            let conversationContext = '';
+            if (contextSummary) {
+                conversationContext = `\n📋 TÓM TẮT: ${contextSummary}\n`;
+            }
+            if (conversationHistory.length > 0) {
+                const recentChat = conversationHistory
+                    .slice(-6)
+                    .map((m, idx) => `[${idx + 1}] ${m.role === 'user' ? '👤 User' : '🤖 Bot'}: ${m.content.substring(0, 250)}`)
+                    .join('\n');
+                conversationContext += `\n📝 LỊCH SỬ HỘI THOẠI:\n${recentChat}\n`;
+                const entityPatterns = [
+                    /dự án[:\s]*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+                    /nhân viên:?\s*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+                    /phòng ban:?\s*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+                    /tên[:\s]*[""]?([^""]+?)[""]?(?:\.|,|\s|$)/gi,
+                ];
+                const mentionedEntities = [];
+                for (const msg of conversationHistory.slice(-4)) {
+                    for (const pattern of entityPatterns) {
+                        const matches = msg.content.matchAll(pattern);
+                        for (const match of matches) {
+                            if (match[1] && match[1].length > 2 && match[1].length < 50) {
+                                mentionedEntities.push(match[1].trim());
+                            }
+                        }
+                    }
+                }
+                if (mentionedEntities.length > 0) {
+                    const uniqueEntities = [...new Set(mentionedEntities)].slice(0, 5);
+                    conversationContext += `\n🔖 ENTITIES ĐÃ NHẮC: ${uniqueEntities.join(', ')}\n`;
+                }
+                this.logger.debug(`🔍 Conversation history (${conversationHistory.length} msgs): ${recentChat.substring(0, 300)}`);
+            }
+            else {
+                this.logger.debug('🔍 No conversation history available');
+            }
+            let databaseContext = '';
+            try {
+                databaseContext = await this.databaseContextService.getAgentContext();
+                if (databaseContext) {
+                    databaseContext = `\n${databaseContext}\n`;
+                }
+            }
+            catch (error) {
+                this.logger.warn(`Could not get database context: ${error}`);
+            }
+            const context = `Bạn là trợ lý AI thông minh cho hệ thống EKG (Enterprise Knowledge Graph).
+${conversationContext}
 
-⚠️ CRITICAL - DOCUMENT QUERIES (HIGHEST PRIORITY):
+🎯 NHIỆM VỤ: Trả lời câu hỏi về nhân sự, dự án, phòng ban, kỹ năng trong tổ chức.
 
-🚨 RULE #1 - NEVER ASK FOR DOCUMENT IDs:
-- When user says "lấy tài liệu X", "tìm tài liệu Y", "file Z", "doc ABC"
-- YOU MUST call "search_documents" tool with documentName extracted from user query
-- NEVER reply with "Tôi cần ID dự án" or ask user for any IDs
-- The search_documents tool will handle everything automatically
+📖 TỪ VỰNG QUAN TRỌNG:
+- "Team" = "Phòng ban" (ví dụ: Team Frontend = Phòng ban Frontend)
+- "nhân sự cần học bổ sung" = sử dụng tool find_employees_needing_training
 
-Example flows:
-- User: "lấy tài liệu README" 
-  → YOU: call search_documents(documentName="README")
-  → System finds 1 result → auto calls get_document_content → show content
-  
-- User: "tài liệu thiết kế UI ZenDo"
-  → YOU: call search_documents(documentName="thiết kế UI ZenDo")
-  → System finds multiple → show numbered list
-  
-- User: "file mô hình đồ thị"
-  → YOU: call search_documents(documentName="mô hình đồ thị")
-  → System finds 0 → suggest alternatives
+📚 VÍ DỤ CÁCH XỬ LÝ CÂU HỎI:
 
-🔴 FORBIDDEN RESPONSES:
-❌ "Bạn cần cung cấp ID dự án"
-❌ "Vui lòng cho tôi biết ID tài liệu"
-❌ "Tôi cần biết ID của dự án"
+Q: "Ai biết React trong phòng IT?"
+→ Gọi: search_employees_advanced(skill="React", department="IT")
 
-✅ CORRECT BEHAVIOR:
-→ Immediately call search_documents tool
-→ Let the system handle the rest
+Q: "Team Frontend ai đang rảnh?" 
+→ Gọi: get_team_availability(departmentName="Frontend")
 
-⚠️ OTHER TOOL USAGE RULES:
+Q: "Dự án nào đang triển khai?"  
+→ Gọi: search_projects_by_status(status="Đang triển khai")
 
-1. When user asks "danh sách kỹ năng" or "tất cả kỹ năng" or "có những kỹ năng gì":
-   → MUST use "list_skills" tool (NO parameters needed)
-   → NEVER use "search_employees_by_name" for this
-   
-2. "list_skills" returns ONLY skill names, NOT employee information
+Q: "Cho tôi thông tin về phòng Kỹ thuật"
+→ Gọi: search_departments_by_name(name="Kỹ thuật")
 
-3. When user asks about employees with specific skills:
-   → Then use "search_employees_by..." tools
+Q: "Nhân viên cấp Senior có bao nhiêu người?"
+→ Gọi: search_employees_by_level(level="Senior")
 
-Hãy sử dụng các công cụ được cung cấp để trả lời câu hỏi của người dùng một cách chính xác.`;
+Q: "Tìm tài liệu hướng dẫn sử dụng"
+→ Gọi: search_documents(documentName="hướng dẫn sử dụng")
+
+Q: "Tìm nhân sự cần học bổ sung" / "Ai cần đào tạo thêm?"
+→ Gọi: find_employees_needing_training()
+
+Q: "Dự án X có những ai tham gia?"
+→ Gọi: get_project_by_id(id="X") hoặc search_projects_by_name(name="X")
+
+Q: "Anh Minh làm ở đâu?" (context: đang nói về Nguyễn Văn Minh)
+→ Gọi: search_employees_by_name(name="Nguyễn Văn Minh")
+
+🔄 CONTEXT AWARENESS:
+- "đó/nó/họ/anh ấy" → Tìm trong LỊCH SỬ ở trên
+- KHÔNG hỏi lại thông tin đã có
+- Thay thế tham chiếu bằng tên cụ thể khi gọi tool
+
+📌 QUY TẮC:
+- Luôn gọi tool để lấy dữ liệu, KHÔNG tự bịa
+- Trả lời bằng tiếng Việt tự nhiên
+- Nếu không tìm thấy → Nói rõ "Không tìm thấy"
+- Format câu trả lời dễ đọc (bullet points nếu nhiều kết quả)`;
             let geminiResult = await this.geminiService.generateResponseWithTools(message, tools, context, conversationHistory);
             let loopCount = 0;
             const maxLoops = 5;
@@ -510,6 +656,77 @@ Hãy sử dụng các công cụ được cung cấp để trả lời câu hỏ
         }
         catch (error) {
             this.logger.error(`Error handling complex query: ${error}`);
+            if (error.message?.includes('429') ||
+                error.message?.includes('quota') ||
+                error.message?.includes('Too Many Requests') ||
+                error.message?.includes('exceeded')) {
+                this.logger.warn('⚠️ Gemini quota exceeded, trying OpenRouter fallback...');
+                try {
+                    if (this.openRouterService.isAvailable()) {
+                        this.logger.log('🔄 Using OpenRouter as fallback (Gemini quota exceeded)');
+                        let openRouterHistory = [];
+                        if (conversationId) {
+                            try {
+                                const messages = await this.redisConversationService.getConversationContext(conversationId, 5);
+                                openRouterHistory = messages
+                                    .filter((m) => m.role === 'user' || m.role === 'assistant')
+                                    .map((m) => ({
+                                    role: m.role,
+                                    content: m.content,
+                                }));
+                            }
+                            catch (e) {
+                            }
+                        }
+                        const openRouterContext = 'Bạn là trợ lý AI thông minh cho hệ thống EKG. Trả lời câu hỏi về nhân sự, dự án, phòng ban trong tổ chức. Trả lời bằng tiếng Việt tự nhiên.';
+                        const openRouterResponse = await this.openRouterService.generateResponse(message, openRouterContext);
+                        if (openRouterResponse && openRouterResponse.trim()) {
+                            return `🔄 *[OpenRouter Fallback]*\n\n${openRouterResponse}`;
+                        }
+                    }
+                }
+                catch (openRouterError) {
+                    this.logger.warn(`OpenRouter fallback failed: ${openRouterError.message}`);
+                    if (!openRouterError.message?.includes('429') &&
+                        !openRouterError.message?.includes('quota')) {
+                        this.logger.error(`OpenRouter error (non-quota): ${openRouterError.message}`);
+                    }
+                }
+                this.logger.warn('⚠️ OpenRouter also failed, trying Ollama RAG...');
+                try {
+                    const ollamaAvailable = await this.ollamaRAGService.isAvailable();
+                    if (ollamaAvailable) {
+                        this.logger.log('🔄 Using Ollama RAG as final fallback');
+                        let ollamaHistory = [];
+                        if (conversationId) {
+                            try {
+                                const messages = await this.redisConversationService.getConversationContext(conversationId, 5);
+                                ollamaHistory = messages
+                                    .filter((m) => m.role === 'user' || m.role === 'assistant')
+                                    .map((m) => ({
+                                    role: m.role,
+                                    content: m.content,
+                                }));
+                            }
+                            catch (e) {
+                            }
+                        }
+                        const ollamaResponse = await this.ollamaRAGService.queryWithRAG(message, 'employees', 10, ollamaHistory);
+                        return `🔄 *[Ollama Fallback - All APIs quota hết]*\n\n${ollamaResponse}`;
+                    }
+                    else {
+                        this.logger.warn('Ollama is not available for fallback');
+                    }
+                }
+                catch (ollamaError) {
+                    this.logger.error(`Ollama fallback also failed: ${ollamaError}`);
+                }
+                return 'Xin lỗi, hệ thống đang quá tải. Vui lòng thử lại sau.';
+            }
+            if (error.message?.includes('model output must contain either output text or tool calls') ||
+                error.message?.includes('empty')) {
+                return 'Xin lỗi, tôi không thể xử lý yêu cầu này. Vui lòng thử lại với câu hỏi đơn giản hơn.';
+            }
             throw error;
         }
     }
@@ -677,10 +894,10 @@ Mô tả: ${tech.description || 'Chưa có mô tả'}
 exports.ChatService = ChatService;
 exports.ChatService = ChatService = ChatService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [query_classifier_service_1.QueryClassifierService,
-        ollama_service_1.OllamaService,
+    __metadata("design:paramtypes", [ollama_service_1.OllamaService,
         chroma_db_service_1.ChromaDBService,
         gemini_service_1.GeminiService,
+        openrouter_service_1.OpenRouterService,
         employees_service_1.EmployeesService,
         skills_service_1.SkillsService,
         departments_service_1.DepartmentsService,
@@ -691,6 +908,11 @@ exports.ChatService = ChatService = ChatService_1 = __decorate([
         ollama_rag_service_1.OllamaRAGService,
         gemini_tools_service_1.GeminiToolsService,
         positions_service_1.PositionsService,
-        technologies_service_1.TechnologiesService])
+        technologies_service_1.TechnologiesService,
+        upload_intent_handler_service_1.UploadIntentHandlerService,
+        context_compression_service_1.ContextCompressionService,
+        user_preference_service_1.UserPreferenceService,
+        suggested_questions_service_1.SuggestedQuestionsService,
+        database_context_service_1.DatabaseContextService])
 ], ChatService);
 //# sourceMappingURL=chat.service.js.map

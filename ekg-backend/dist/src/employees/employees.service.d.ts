@@ -1,8 +1,10 @@
 import { Neo4jService } from '../core/neo4j/neo4j.service';
+import { GraphDataExtractor } from '../chat/services/graph-data-extractor.service';
 export declare class EmployeesService {
     private neo;
+    private graphExtractor;
     private readonly logger;
-    constructor(neo: Neo4jService);
+    constructor(neo: Neo4jService, graphExtractor: GraphDataExtractor);
     list(skip?: number, limit?: number): Promise<any[]>;
     findByName(name: string, skip?: number, limit?: number): Promise<any[]>;
     get(empId: string): Promise<any>;
@@ -16,7 +18,20 @@ export declare class EmployeesService {
     }>;
     topSkills(limit?: number): Promise<any[]>;
     findByDepartment(deptName: string, skip?: number, limit?: number): Promise<any[]>;
-    findBySkill(skillName: string, skip?: number, limit?: number): Promise<any[]>;
+    findBySkill(skillName: string, skip?: number, limit?: number): Promise<{
+        employees: {
+            id: any;
+            empId: any;
+            name: any;
+            position: any;
+            department: any;
+            skills: {
+                name: any;
+                level: any;
+            }[];
+        }[];
+        graphData: any;
+    }>;
     findByPosition(position: string, skip?: number, limit?: number): Promise<any[]>;
     findByProject(projectKey: string, skip?: number, limit?: number): Promise<any[]>;
     searchByLevel(level: string, skip?: number, limit?: number): Promise<any[]>;

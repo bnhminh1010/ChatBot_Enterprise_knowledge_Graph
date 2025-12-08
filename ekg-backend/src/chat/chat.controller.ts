@@ -47,9 +47,30 @@ export class ChatController {
         processingTime: result.processingTime,
         conversationId: result.conversationId,
         timestamp: new Date(),
+        suggestedQuestions: result.suggestedQuestions,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error processing chat query: ${error}`);
+
+      // Handle empty model output error gracefully
+      if (
+        error.message?.includes(
+          'model output must contain either output text or tool calls',
+        ) ||
+        error.message?.includes('empty')
+      ) {
+        return {
+          message: dto.message,
+          response:
+            'Xin lỗi, hệ thống đang gặp sự cố. Vui lòng thử lại sau giây lát.',
+          queryType: 'error',
+          queryLevel: 'simple',
+          processingTime: 0,
+          conversationId: dto.conversationId,
+          timestamp: new Date(),
+        };
+      }
+
       throw error;
     }
   }
