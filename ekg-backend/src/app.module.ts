@@ -1,3 +1,18 @@
+/**
+ * @fileoverview App Module - Root Application Module
+ * @module app.module
+ *
+ * Root module của ứng dụng EKG Backend.
+ * Import và configure tất cả feature modules.
+ *
+ * Modules:
+ * - Core: Neo4jModule, RedisModule, CacheModule
+ * - Auth: AuthModule, UsersModule
+ * - Entities: EmployeesModule, ProjectsModule, DepartmentsModule, SkillsModule
+ * - Features: ChatModule, AiModule, DocumentsModule
+ *
+ * @author APTX3107 Team
+ */
 import { Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { Neo4jModule } from './core/neo4j/neo4j.module';
@@ -13,27 +28,35 @@ import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 
+/**
+ * Root module của ứng dụng.
+ * Configure cache và import tất cả feature modules.
+ */
 @Module({
   imports: [
     // Cache configuration - in-memory store
     CacheModule.register({
-      isGlobal: true, // Make cache available globally
-      ttl: 600, // Default TTL: 10 minutes (in seconds)
-      max: 100, // Maximum number of items in cache
+      isGlobal: true,
+      ttl: 600, // 10 minutes default TTL
+      max: 100, // Max items in cache
     }),
+    // Core modules
     Neo4jModule,
-    RedisModule, // Global Redis provider
+    RedisModule,
+    // Auth
     AuthModule,
     UsersModule,
+    // Entity modules
     EmployeesModule,
     ProjectsModule,
     DocumentsModule,
     DepartmentsModule,
     SkillsModule,
+    // Feature modules
     AiModule,
     ChatModule,
   ],
   controllers: [SearchController],
   providers: [],
 })
-export class AppModule { }
+export class AppModule {}

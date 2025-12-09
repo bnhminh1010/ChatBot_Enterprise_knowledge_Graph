@@ -1,343 +1,474 @@
-# 🧠 Enterprise Knowledge Graph (EKG) – APTX3107 Company
+# Enterprise Knowledge Graph (EKG) - APTX3107 Company
 
-> 🚀 **Đồ án chuyên ngành HUTECH**  
-> **Đề tài:** Xây dựng hệ thống Đồ thị Tri thức Doanh nghiệp (Enterprise Knowledge Graph) cho công ty phần mềm APTX3107.  
-> **Công nghệ:** Neo4j · Next.js · NestJS · AI Chat System
+> **Đồ án chuyên ngành** - Khoa Công nghệ Thông tin, Đại học Công nghệ TP.HCM (HUTECH)
 
----
+**Đề tài:** Xây dựng hệ thống Đồ thị Tri thức Doanh nghiệp cho công ty phần mềm APTX3107
 
-## 📚 Giới thiệu đề tài
-
-### 🎯 Mục tiêu
-
-- Biểu diễn **tri thức doanh nghiệp phần mềm** dưới dạng **Knowledge Graph** (Neo4j) gồm các thực thể: Nhân sự, Phòng ban, Kỹ năng, Dự án, Chức danh, Công nghệ,...
-- Xây dựng hệ thống **API + Web + AI Chatbot** để tra cứu, trực quan hóa và phân tích tri thức.
-- Ứng dụng **AI / Chatbot** để hỏi–đáp tri thức doanh nghiệp bằng ngôn ngữ tự nhiên với Ollama + Gemini.
-
-### 🧩 Ý nghĩa
-
-- Giúp công ty hiểu rõ **năng lực nội bộ**, **mối quan hệ nhân sự – kỹ năng – dự án**.
-- Hỗ trợ **ra quyết định nhanh** về nhân sự, đào tạo, và phân bổ nguồn lực.
-- Là nền tảng cho **Talent Intelligence** và **Enterprise Search**.
+**Công nghệ chính:** Neo4j • NestJS • Next.js • AI (Gemini + Ollama)
 
 ---
 
-## 👨‍💻 Nhóm thực hiện
+## Mục lục
 
-| STT | Họ và Tên                 | Vai trò                      | Nhiệm vụ chính                                                               |
-| --- | ------------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
-| 1   | **Nguyễn Bình Minh**      | Frontend & Backend Developer | Xây dựng Web (Next.js), Backend API (NestJS), AI Chat Integration.        |
-| 2   | **Lại Vũ Hoàng Minh**     | Database Engineer            | Thiết kế Ontology, xây dựng đồ thị tri thức bằng Neo4j, viết Cypher queries. |
-| 3   | **Nguyễn Hoàng Anh Khoa** | Tester                       | Kiểm thử hệ thống, viết test case, đánh giá hiệu năng và độ chính xác.       |
-
----
-
-## 🏗️ Kiến trúc hệ thống
-
-```mermaid
-graph TD
-  A["Web App (Next.js)"] -->|HTTP REST| B["Backend API (NestJS)"]
-  B -->|Cypher Queries| C[("Neo4j Database")]
-  B -->|Embeddings| D["Ollama Local LLM"]
-  B -->|Complex Queries| E["Gemini AI"]
-  C --> F[("Enterprise Knowledge Graph")]
-  B -->|Cache| G[("Redis")]
-```
-
-### Tech Stack
-
-| Thành phần              | Công nghệ                                                | Mô tả                                              |
-| ----------------------- | -------------------------------------------------------- | -------------------------------------------------- |
-| **Frontend Web**        | Next.js 16 + TypeScript + TailwindCSS                  | Giao diện Dashboard, Chat Interface, trực quan hóa KG |
-| **Backend API**         | NestJS + TypeScript + neo4j-driver                       | RESTful API, Authentication, Business Logic          |
-| **Database**            | Neo4j 5.x + Cypher + APOC                                    | Lưu trữ Knowledge Graph                      |
-| **AI Layer** | Ollama (Local LLM) + Gemini API + ChromaDB                          | 3-tier AI Chat System (Simple/Medium/Complex)                           |
-| **Caching**             | Redis                                    | Conversation history, Token refresh              |
-| **Auth**                | JWT + Passport                                    | Authentication & Authorization (Admin/Viewer)              |
-| **Dev Tools**           | Docker Compose, Turbo, ESLint, Prettier               | Development environment & Code quality            |
+1. [Giới thiệu](#giới-thiệu)
+2. [Nhóm thực hiện](#nhóm-thực-hiện)
+3. [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
+4. [Công nghệ sử dụng](#công-nghệ-sử-dụng)
+5. [Cấu trúc dự án](#cấu-trúc-dự-án)
+6. [Hướng dẫn cài đặt](#hướng-dẫn-cài-đặt)
+7. [Mô hình dữ liệu](#mô-hình-dữ-liệu)
+8. [Hệ thống AI Chat](#hệ-thống-ai-chat)
+9. [Các chế độ Chat](#các-chế-độ-chat)
+10. [Phân quyền](#phân-quyền)
+11. [API Reference](#api-reference)
+12. [Tính năng đã triển khai](#tính-năng-đã-triển-khai)
+13. [Liên hệ](#liên-hệ)
 
 ---
 
-## 🗂️ Cấu trúc dự án
+## Giới thiệu
+
+### Mục tiêu
+
+- Biểu diễn tri thức doanh nghiệp phần mềm dưới dạng Knowledge Graph (Neo4j) gồm các thực thể: Nhân sự, Phòng ban, Kỹ năng, Dự án, Chức danh, Công nghệ, Tài liệu.
+- Xây dựng hệ thống API, Web và AI Chatbot để tra cứu, trực quan hóa và phân tích tri thức.
+- Ứng dụng AI Agent với Function Calling để hỏi-đáp tri thức doanh nghiệp bằng ngôn ngữ tự nhiên.
+
+### Ý nghĩa thực tiễn
+
+- Giúp doanh nghiệp hiểu rõ năng lực nội bộ, mối quan hệ nhân sự - kỹ năng - dự án.
+- Hỗ trợ ra quyết định nhanh về nhân sự, đào tạo và phân bổ nguồn lực.
+- Là nền tảng cho Talent Intelligence và Enterprise Search.
+
+---
+
+## Nhóm thực hiện
+
+| STT | Họ và Tên | Vai trò | Nhiệm vụ chính |
+|-----|-----------|---------|----------------|
+| 1 | Nguyễn Bình Minh | Frontend & Backend Developer | Xây dựng Web (Next.js), Backend API (NestJS), AI Chat Integration |
+| 2 | Lại Vũ Hoàng Minh | Database Engineer | Thiết kế Ontology, xây dựng đồ thị tri thức Neo4j, viết Cypher queries |
+| 3 | Nguyễn Hoàng Anh Khoa | Tester | Kiểm thử hệ thống, viết test case, đánh giá hiệu năng |
+
+**Giảng viên hướng dẫn:** Nguyễn Đình Ánh
+
+---
+
+## Kiến trúc hệ thống
+
+### Tổng quan kiến trúc
 
 ```
-ChatBot_Enterprise_knowledge_Graph/
-├── ekg-backend/                 # NestJS Backend API
-│   ├── src/
-│   │   ├── ai/                  # AI services (Ollama, Gemini, ChromaDB)
-│   │   ├── auth/                # JWT Authentication
-│   │   ├── chat/                # Chat module
-│   │   ├── employees/           # Employee endpoints
-│   │   ├── departments/         # Department endpoints
-│   │   ├── skills/              # Skills endpoints
-│   │   └── ...
-│   ├── docker-compose.yml       # Neo4j + Redis + Ollama
-│   └── README.md
-├── ekg-frontend/                # Next.js Frontend
-│   └── apps/web/
-│       ├── src/
-│       │   ├── components/      # React components
-│       │   ├── server/services/ # API client services
-│       │   └── lib/             # Utilities
-│       └── README.md
-├── Tài liệu/MD_File/            # � All Documentation
-│   ├── 00_Getting_Started/      # Quick start guides
-│   ├── 01_Setup_Installation/   # Setup & installation
-│   ├── 02_Database_Setup/       # Neo4j & Redis setup
-│   ├── 03_Authentication/       # Auth & permissions
-│   ├── 04_AI_Chat_System/       # AI & chatbot setup
-│   └── 05_Implementation_Summary/ # Reports & summaries
-└── README.md                    # This file
+┌─────────────────┐     HTTP/REST     ┌──────────────────┐
+│   Frontend      │ ←───────────────→ │   Backend API    │
+│   (Next.js)     │                   │   (NestJS)       │
+└─────────────────┘                   └────────┬─────────┘
+                                               │
+                    ┌──────────────────────────┼──────────────────────────┐
+                    │                          │                          │
+                    ▼                          ▼                          ▼
+            ┌───────────────┐          ┌───────────────┐          ┌───────────────┐
+            │   Neo4j       │          │   Redis       │          │   AI Layer    │
+            │   Database    │          │   Cache       │          │               │
+            └───────────────┘          └───────────────┘          └───────┬───────┘
+                                                                          │
+                                               ┌──────────────────────────┼──────────────────────────┐
+                                               │                          │                          │
+                                               ▼                          ▼                          ▼
+                                       ┌───────────────┐          ┌───────────────┐          ┌───────────────┐
+                                       │   Gemini      │          │   Ollama      │          │   ChromaDB    │
+                                       │   (Cloud)     │          │   (Local)     │          │   (Vector)    │
+                                       └───────────────┘          └───────────────┘          └───────────────┘
 ```
 
----
-
-## 🚀 Quick Start
-
-### 📖 Bắt đầu nhanh
-
-**Xem hướng dẫn chi tiết tại:**  
-📁 [`Tài liệu/MD_File/00_Getting_Started/`](./Tài%20liệu/MD_File/00_Getting_Started/)
-
-### 1️⃣ Khởi động Backend
-
-```bash
-cd ekg-backend
-npm install
-docker-compose up -d      # Start Neo4j + Redis + Ollama
-npm run start:dev         # Start NestJS server
-```
-
-**Verify:** Truy cập http://localhost:3002/docs để xem Swagger API
-
-### 2️⃣ Khởi động Frontend
-
-```bash
-cd ekg-frontend/apps/web
-npm install
-npm run dev               # Start Next.js
-```
-
-**Verify:** Truy cập http://localhost:3000
-
-### 3️⃣ Test AI Chat
-
-- Vào http://localhost:3000
-- Thử chat: "Danh sách nhân viên"
-- Chatbot sẽ tương tác với backend và Neo4j
-
----
-
-## 🧠 Ontology (Domain Model)
-
-**Các Node chính:**
-
-- `CongTy`, `DonVi`, `PhongBan`, `Nhom`
-- `NhanSu`, `ChucDanh`, `KyNang`
-- `DuAn`, `CongNghe`
-- `NguoiDung`, `VaiTro` (Authentication)
-- `Conversation`, `Message` (Chat history)
-
-**Các Quan hệ (Relationships):**
-
-| Quan hệ             | Ý nghĩa                   |
-| ------------------- | ------------------------- |
-| `BAO_CAO_CHO`       | Nhân sự báo cáo cấp trên  |
-| `THAM_GIA_NHOM`     | Nhân sự thuộc nhóm        |
-| `GIU_CHUC_DANH`     | Giữ vai trò/chức danh     |
-| `CO_KY_NANG`        | Nhân sự có kỹ năng        |
-| `YEU_CAU_KY_NANG`   | Kỹ năng cần cho chức danh |
-| `LAM_DU_AN`         | Nhân sự tham gia dự án    |
-| `SU_DUNG_CONG_NGHE` | Dự án sử dụng công nghệ   |
-| `CO_VAI_TRO`        | User có role              |
-| `HAS_CONVERSATION`  | User có conversation      |
-
----
-
-## 🤖 AI Chat System
-
-Hệ thống AI Chat với **3-tier intelligent routing**:
-
-### Luồng xử lý
+### Luồng xử lý AI Chat (Agent Architecture)
 
 ```
 User Query
-    ↓
-Query Classifier (AI-powered)
-    ↓
-┌─────────────┬─────────────┬─────────────┐
-│   Simple    │   Medium    │   Complex   │
-│   (30%)     │   (50%)     │   (20%)     │
-└─────────────┴─────────────┴─────────────┘
-      ↓             ↓             ↓
-   Neo4j      Ollama RAG      Gemini
-   Direct     (LOCAL!)     (Cloud API)
-   Query      <500ms        1-3s
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    ChatService.processQuery()                │
+└─────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Query Analyzer                            │
+│         (Intent Detection + Entity Extraction)               │
+└─────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Agent Planner                             │
+│              (Quyết định cần tools nào)                      │
+└─────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│            Gemini Function Calling (40+ Tools)               │
+│                                                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │ Employee    │  │ Project     │  │ Document    │   ...    │
+│  │ Tools       │  │ Tools       │  │ Tools       │          │
+│  └─────────────┘  └─────────────┘  └─────────────┘          │
+└─────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Neo4j Cypher Query                        │
+└─────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Natural Language Response                   │
+└─────────────────────────────────────────────────────────────┘
 ```
-
-### Ví dụ
-
-```
-Simple:  "Danh sách nhân viên" → Neo4j → <100ms
-Medium:  "Tìm người giỏi Java" → Ollama RAG → <500ms  
-Complex: "Tư vấn team cho dự án AI" → Gemini → 1-3s
-```
-
-**Chi tiết:** Xem [`Tài liệu/MD_File/04_AI_Chat_System/`](./Tài%20liệu/MD_File/04_AI_Chat_System/)
 
 ---
 
-## 🔐 Authentication & Authorization
+## Công nghệ sử dụng
 
-**Mô hình phân quyền 2-level:**
-
-- **Admin**: Full quyền CRUD trên Knowledge Graph
-- **Viewer**: Chỉ được đọc (Read-only)
-
-**Credentials demo:**
-- Admin: `admin` / `Admin@123`
-- Viewers: `NS001-NS040` / `NSxxx@123`
-
-**Chi tiết:** Xem [`Tài liệu/MD_File/03_Authentication/`](./Tài%20liệu/MD_File/03_Authentication/)
-
----
-
-## 📚 Tài liệu đầy đủ
-
-Tất cả tài liệu được tổ chức tại **[`Tài liệu/MD_File/`](./Tài%20liệu/MD_File/)**
-
-### 📁 Cấu trúc Documentation
-
-```
-Tài liệu/MD_File/
-├── 00_Getting_Started/          # 🚀 Bắt đầu nhanh
-│   ├── 00_START_HERE.md         # Overview & roadmap
-│   ├── QUICK_START.md           # 3-step quick start
-│   └── SETUP_METHODS.md         # 3 setup methods
-├── 01_Setup_Installation/       # ⚙️ Cài đặt
-│   ├── AUTOMATED_STARTUP.md     # Auto-start scripts
-│   ├── AUTO_START_DOCKER.md     # Docker auto-start
-│   ├── Backend_README.md        # Backend overview
-│   └── SETUP_GUIDE.md           # Chi tiết setup
-├── 02_Database_Setup/           # 🗄️ Database
-│   ├── DATABASE_SETUP.md        # Neo4j setup & seeding
-│   ├── REDIS_SETUP_GUIDE.md     # Redis configuration
-│   └── TROUBLESHOOTING_DATABASE.md # Fix database issues
-├── 03_Authentication/           # 🔐 Phân quyền
-│   ├── PhanQuyen_Neo4j_Admin_Viewer.md # Auth model
-│   └── SETUP_AUTH.md            # JWT authentication
-├── 04_AI_Chat_System/           # 🤖 AI & Chat
-│   ├── FRONTEND_CHAT_SETUP.md   # Frontend integration
-│   ├── OLLAMA_SETUP.md          # Ollama LLM setup
-│   └── TESTING_GUIDE.md         # Chat testing guide
-└── 05_Implementation_Summary/   # 📊 Tổng hợp
-    ├── EKG_APTX_Document_Backend_Spec.md # Backend spec
-    ├── IMPLEMENTATION_COMPLETE.md # FE-BE integration
-    ├── IMPLEMENTATION_REPORT.md   # Report với statistics
-    ├── IMPLEMENTATION_SUMMARY.md  # AI Chat overview
-    ├── INTEGRATION_CHECKLIST.md   # Testing checklist
-    ├── INTEGRATION_SUMMARY.md     # Architecture summary
-    └── VERIFICATION_CHECKLIST.md  # 7-phase verification
-```
-
-### 🎯 Hướng dẫn nhanh
-
-| Tôi muốn...                | Xem file...                              |
-| -------------------------- | ---------------------------------------- |
-| Bắt đầu nhanh              | `00_Getting_Started/QUICK_START.md`      |
-| Setup toàn bộ hệ thống     | `01_Setup_Installation/SETUP_GUIDE.md`   |
-| Cấu hình database          | `02_Database_Setup/DATABASE_SETUP.md`    |
-| Setup phân quyền           | `03_Authentication/SETUP_AUTH.md`        |
-| Cài đặt AI chatbot         | `04_AI_Chat_System/OLLAMA_SETUP.md`      |
-| Xem tổng quan triển khai   | `05_Implementation_Summary/IMPLEMENTATION_SUMMARY.md` |
+| Thành phần | Công nghệ | Mô tả |
+|------------|-----------|-------|
+| Frontend | Next.js 14, React, TypeScript, TailwindCSS | Giao diện Dashboard và Chat |
+| Backend | NestJS 10, TypeScript, neo4j-driver | RESTful API, Business Logic |
+| Database | Neo4j 5.x, APOC | Knowledge Graph Storage |
+| Cache | Redis 7.x | Conversation History, Token Cache |
+| AI - Cloud | Google Gemini API | Function Calling, Complex Queries |
+| AI - Local | Ollama (qwen2.5) | Embeddings, Simple Queries |
+| Vector DB | ChromaDB (File-based) | Semantic Search |
+| File Storage | AWS S3 | Document Upload |
+| Authentication | JWT, Passport.js | RBAC (Admin/Viewer) |
+| DevOps | Docker Compose | Neo4j + Redis + Ollama |
 
 ---
 
-## 🔌 API Endpoints
-
-### Core Endpoints
+## Cấu trúc dự án
 
 ```
-GET    /employees              # Danh sách nhân viên
-GET    /employees/:id          # Chi tiết nhân viên
-POST   /employees              # Tạo nhân viên (Admin only)
-
-GET    /departments            # Danh sách phòng ban
-GET    /skills                 # Danh sách kỹ năng
-GET    /projects               # Danh sách dự án
-
-GET    /search?q=keyword       # Tìm kiếm toàn bộ
+ChatBot_Enterprise_knowledge_Graph/
+│
+├── ekg-backend/                        # NestJS Backend API
+│   ├── src/
+│   │   ├── ai/                         # AI Services
+│   │   │   ├── agent/                  # Agent Planner & Executor
+│   │   │   ├── gemini.service.ts       # Gemini API (Function Calling)
+│   │   │   ├── gemini-tools.service.ts # 40+ Tool Definitions
+│   │   │   ├── ollama.service.ts       # Ollama Embeddings
+│   │   │   ├── openrouter.service.ts   # OpenRouter Fallback
+│   │   │   └── chroma-db.service.ts    # Vector Database
+│   │   │
+│   │   ├── chat/                       # Chat Module
+│   │   │   ├── chat.controller.ts      # API Endpoints
+│   │   │   ├── chat.service.ts         # Main Processing Logic
+│   │   │   └── services/               # 20+ Support Services
+│   │   │       ├── query-analyzer.service.ts
+│   │   │       ├── redis-conversation.service.ts
+│   │   │       ├── recommendation.service.ts
+│   │   │       ├── scheduler.service.ts
+│   │   │       └── ...
+│   │   │
+│   │   ├── auth/                       # JWT Authentication
+│   │   ├── employees/                  # Employee CRUD
+│   │   ├── departments/                # Department CRUD
+│   │   ├── projects/                   # Project CRUD
+│   │   ├── skills/                     # Skills CRUD
+│   │   ├── documents/                  # Document Upload (S3)
+│   │   ├── positions/                  # Position CRUD
+│   │   ├── technologies/               # Technology CRUD
+│   │   └── core/neo4j/                 # Neo4j Connection
+│   │
+│   ├── data/chromadb/                  # Vector Embeddings
+│   └── docker-compose.yml              # Infrastructure
+│
+├── ekg-frontend/                       # Next.js Frontend
+│   └── apps/web/src/
+│       ├── components/
+│       │   ├── chat/                   # Chat Components
+│       │   │   ├── Chat.tsx            # Main Chat Container
+│       │   │   ├── ChatInput.tsx       # Mode Selector + Input
+│       │   │   ├── ChatMessages.tsx    # Message List
+│       │   │   ├── MessageContent.tsx  # Markdown + Chart Render
+│       │   │   ├── ChartRenderer.tsx   # Recharts Integration
+│       │   │   ├── DocumentUploadModal.tsx
+│       │   │   ├── RecommendationCard.tsx
+│       │   │   └── TaskCard.tsx
+│       │   │
+│       │   └── graph/                  # Knowledge Graph Viz
+│       │
+│       ├── server/services/            # API Client
+│       ├── hooks/                      # React Hooks
+│       └── lib/                        # Utilities
+│
+├── Tài liệu/MD_File/                   # Documentation
+│   ├── 00_Getting_Started/
+│   ├── 01_Setup_Installation/
+│   ├── 02_Database_Setup/
+│   ├── 03_Authentication/
+│   ├── 04_AI_Chat_System/
+│   └── 05_Implementation_Summary/
+│
+└── README.md
 ```
 
-### AI Chat Endpoints
+---
+
+## Hướng dẫn cài đặt
+
+### Yêu cầu hệ thống
+
+- Node.js >= 18.x
+- Docker & Docker Compose
+- Git
+
+### Bước 1: Clone repository
+
+```bash
+git clone https://github.com/[your-repo]/ChatBot_Enterprise_knowledge_Graph.git
+cd ChatBot_Enterprise_knowledge_Graph
+```
+
+### Bước 2: Khởi động Backend
+
+```bash
+cd ekg-backend
+
+# Cài đặt dependencies
+npm install
+
+# Copy và cấu hình environment
+cp .env.example .env
+# Chỉnh sửa: GEMINI_API_KEY, NEO4J_PASSWORD, etc.
+
+# Khởi động infrastructure
+docker-compose up -d
+
+# Chờ Neo4j khởi động (~30 giây)
+npm run start:dev
+```
+
+**Kiểm tra:** http://localhost:3002/docs (Swagger)
+
+### Bước 3: Khởi động Frontend
+
+```bash
+cd ekg-frontend/apps/web
+
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+**Kiểm tra:** http://localhost:3000
+
+### Bước 4: Index dữ liệu vào ChromaDB
+
+```bash
+# Gọi API để index entities cho semantic search
+curl -X POST http://localhost:3002/chat/index \
+  -H "Authorization: Bearer <your-token>"
+```
+
+---
+
+## Mô hình dữ liệu
+
+### Các Node (Entity)
+
+| Node | Mô tả | Thuộc tính chính |
+|------|-------|------------------|
+| NhanSu | Nhân viên | id, name, email, phone, empId |
+| PhongBan | Phòng ban | id, name, code |
+| DuAn | Dự án | id, name, status, startDate, endDate |
+| KyNang | Kỹ năng | name, category, level |
+| ChucDanh | Chức danh | name, level |
+| CongNghe | Công nghệ | name, type |
+| TaiLieu | Tài liệu | id, name, url, content |
+| NguoiDung | User đăng nhập | username, role |
+
+### Các Relationship
+
+| Relationship | Từ → Đến | Ý nghĩa |
+|--------------|----------|---------|
+| THUOC_PHONG_BAN | NhanSu → PhongBan | Nhân sự thuộc phòng ban |
+| CO_KY_NANG | NhanSu → KyNang | Nhân sự có kỹ năng |
+| GIU_CHUC_DANH | NhanSu → ChucDanh | Nhân sự giữ chức danh |
+| THAM_GIA | NhanSu → DuAn | Nhân sự tham gia dự án |
+| SU_DUNG | DuAn → CongNghe | Dự án sử dụng công nghệ |
+| BAO_CAO_CHO | NhanSu → NhanSu | Cấu trúc quản lý |
+| CO_TAI_LIEU | DuAn → TaiLieu | Dự án có tài liệu |
+
+---
+
+## Hệ thống AI Chat
+
+### Agent Architecture
+
+Hệ thống sử dụng **Agent-based Architecture** với Gemini Function Calling:
+
+1. **Query Analyzer:** Phân tích intent và trích xuất entities từ câu hỏi
+2. **Agent Planner:** Quyết định cần sử dụng tools nào
+3. **Gemini Function Calling:** Thực thi tools và lấy dữ liệu từ Neo4j
+4. **Response Generator:** Tạo câu trả lời tự nhiên từ dữ liệu
+
+### Danh sách Tools (40+)
+
+| Category | Tools | Mô tả |
+|----------|-------|-------|
+| Universal | `universal_search`, `get_system_overview` | Vector search toàn hệ thống |
+| Employee | `search_employees_by_skill`, `count_employees`, `get_employee_by_id` | Query nhân viên |
+| Department | `list_departments`, `get_department_by_id` | Query phòng ban |
+| Project | `search_projects`, `get_project_by_id`, `list_project_members` | Query dự án |
+| Document | `search_documents`, `rag_document_search` | Tìm kiếm tài liệu |
+| Advanced | `execute_cypher_query`, `generate_chart` | Query phức tạp, tạo biểu đồ |
+| Recommendation | `recommend_employee_for_project`, `find_skill_gaps` | Gợi ý thông minh |
+| Scheduler | `find_available_slots`, `suggest_meeting_time` | Lên lịch họp |
+
+### Ví dụ câu hỏi
 
 ```
-POST   /chat                   # Process chat message
-POST   /chat/index             # Index entities to ChromaDB
-GET    /chat/health            # System health check
+"Có bao nhiêu nhân viên trong công ty?"
+"Ai biết React trong phòng Frontend?"
+"Thống kê kỹ năng theo phòng ban"
+"Gợi ý người phù hợp cho dự án E-commerce"
+"Tìm lịch họp phù hợp cho team Backend"
 ```
+
+---
+
+## Các chế độ Chat
+
+Frontend hỗ trợ 5 chế độ chat:
+
+| Mode | Mô tả | Đặc điểm |
+|------|-------|----------|
+| **Chat** | Trò chuyện thông thường | Agent tự động routing |
+| **Vision** | Phân tích hình ảnh | Upload ảnh + câu hỏi |
+| **Document** | Phân tích tài liệu | PDF, Word, Excel + câu hỏi |
+| **Sequential Thinking** | Suy luận từng bước | Chain-of-Thought prompting |
+| **Deeper Research** | Nghiên cứu sâu | (Đang phát triển) |
+
+### Sequential Thinking Mode
+
+Chế độ này sử dụng Chain-of-Thought prompting để AI:
+- Phân tích câu hỏi
+- Liệt kê các bước suy luận
+- Giải thích lý do từng bước
+- Đưa ra kết luận cuối cùng
+
+Phù hợp cho các câu hỏi phức tạp cần reasoning nhiều bước.
+
+---
+
+## Phân quyền
+
+### Mô hình RBAC
+
+| Role | Quyền hạn |
+|------|-----------|
+| ADMIN | Full CRUD trên tất cả entities, quản lý user |
+| VIEWER | Read-only, sử dụng chat, upload tài liệu |
+
+### Tài khoản demo
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | Admin@123 | ADMIN |
+| NS001 | NS001@123 | VIEWER |
+
+---
+
+## API Reference
 
 ### Authentication
 
 ```
-POST   /auth/login             # Login → JWT token
-GET    /auth/profile           # Get current user info
+POST /auth/login          # Đăng nhập → JWT token
+GET  /auth/profile        # Thông tin user hiện tại
 ```
 
-**API Documentation:** http://localhost:3002/docs (Swagger)
+### Chat Endpoints
+
+```
+POST /chat                # Chat thông thường (Agent)
+POST /chat/with-file      # Chat với file (Vision/Document)
+POST /chat/thinking       # Chat với Sequential Thinking
+POST /chat/index          # Index entities vào ChromaDB
+GET  /chat/health         # Health check
+```
+
+### Entity Endpoints
+
+```
+GET  /employees           # Danh sách nhân viên
+GET  /employees/:id       # Chi tiết nhân viên
+POST /employees           # Tạo nhân viên (Admin)
+
+GET  /departments         # Danh sách phòng ban
+GET  /projects            # Danh sách dự án
+GET  /skills              # Danh sách kỹ năng
+GET  /technologies        # Danh sách công nghệ
+
+GET  /search?q=keyword    # Tìm kiếm toàn cục
+```
+
+### Document Endpoints
+
+```
+POST /documents/upload    # Upload tài liệu lên S3
+GET  /documents/project/:id  # Tài liệu theo dự án
+```
+
+**Swagger Documentation:** http://localhost:3002/docs
 
 ---
 
-## 🧪 Chức năng đã triển khai
+## Tính năng đã triển khai
 
-✅ **Knowledge Graph** - Neo4j với đầy đủ entities & relationships  
-✅ **Backend API** - NestJS với RESTful endpoints  
-✅ **Frontend Web** - Next.js với chat interface  
-✅ **AI Chat System** - 3-tier routing (Neo4j/Ollama/Gemini)  
-✅ **Authentication** - JWT với Admin/Viewer roles  
-✅ **Conversation History** - Redis-based chat storage  
-✅ **Vector Search** - ChromaDB semantic search  
-✅ **Auto-startup** - Docker Compose orchestration  
-✅ **Documentation** - 22 markdown files organized by features
+### Backend
+
+- [x] Knowledge Graph Neo4j với đầy đủ entities và relationships
+- [x] RESTful API với NestJS
+- [x] Agent Architecture với 40+ Function Tools
+- [x] Multi-provider AI (Gemini + Ollama + OpenRouter)
+- [x] Vector Search với ChromaDB
+- [x] Conversation History với Redis
+- [x] Document Upload với AWS S3
+- [x] JWT Authentication với RBAC
+- [x] Query Caching và Compression
+
+### Frontend
+
+- [x] Chat Interface với multi-mode
+- [x] Mode Selector (Chat/Vision/Document/Thinking)
+- [x] File Upload (Ảnh, PDF, Word, Excel)
+- [x] Markdown Rendering
+- [x] Chart Rendering (Recharts)
+- [x] Document Upload Modal
+- [x] Recommendation Cards
+- [x] Dark Mode
 
 ---
 
-## 📆 Tiến độ đồ án
+## Hướng phát triển
 
-| Tuần  | Nội dung chính                       | Người phụ trách | Trạng thái |
-| ----- | ------------------------------------ | --------------- | ---------- |
-| 1–3   | Nghiên cứu EKG & Neo4j               | Toàn nhóm       | ✅         |
-| 4–6   | Thiết kế Ontology & mô hình dữ liệu  | Hoàng Minh      | ✅         |
-| 7–9   | Import dữ liệu & tạo truy vấn Cypher | Hoàng Minh      | ✅         |
-| 10–11 | Xây dựng API & kết nối Neo4j         | Bình Minh       | ✅         |
-| 12–13 | Web UI & AI Chat System              | Bình Minh       | ✅         |
-| 14    | Test & Fix lỗi                       | Hoàng Anh Khoa  | 🔄         |
-| 15    | Demo & Báo cáo                       | Toàn nhóm       | 🔜         |
-
----
-
-## 🏁 Hướng phát triển tương lai
-
-- ✅ ~~Vector Search (ChromaDB)~~ - **Đã hoàn thành**
-- ✅ ~~Chatbot hỏi–đáp tri thức với LLM~~ - **Đã hoàn thành**
-- ✅ ~~Role-based Access Control (RBAC)~~ - **Đã hoàn thành**
-- [ ] Dashboard phân tích kỹ năng – nhân sự – dự án
+- [ ] Deeper Research mode với multi-step reasoning
+- [ ] Dashboard phân tích kỹ năng - nhân sự - dự án
+- [ ] Knowledge Graph Visualization
 - [ ] Mobile App (React Native)
 - [ ] Real-time collaboration
-- [ ] Advanced analytics & reporting
+- [ ] Advanced analytics và reporting
 
 ---
 
-## 📜 Giấy phép & Liên hệ
+## Liên hệ
 
-Dự án thuộc **Đồ án chuyên ngành – Khoa Công nghệ Thông tin, Đại học HUTECH**.  
-Tác giả giữ toàn quyền với mã nguồn và nội dung.
+**Dự án thuộc Đồ án chuyên ngành - Khoa Công nghệ Thông tin**
 
-📧 **Liên hệ nhóm:** team4.ekg.aptx3107@gmail.com  
-📍 **Trường Đại học Công nghệ TP.HCM – HUTECH**
+Trường Đại học Công nghệ TP.HCM (HUTECH)
+
+**Email:** pata10102004@gmail.com
 
 ---
 
-> 💡 **Mục tiêu cuối cùng:** EKG trở thành **"bộ não tri thức doanh nghiệp"**, giúp công ty APTX3107 ra quyết định dựa trên dữ liệu tri thức nội bộ với hỗ trợ AI.
-
-**🎉 Hệ thống đã sẵn sàng! Bắt đầu khám phá tri thức doanh nghiệp ngay!**
+*Mục tiêu: EKG trở thành "bộ não tri thức doanh nghiệp", giúp công ty APTX3107 ra quyết định dựa trên dữ liệu tri thức nội bộ với hỗ trợ AI.*

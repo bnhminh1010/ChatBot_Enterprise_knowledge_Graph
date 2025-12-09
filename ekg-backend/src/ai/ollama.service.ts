@@ -184,4 +184,56 @@ export class OllamaService {
       throw new Error(`Failed to pull model ${modelName}`);
     }
   }
+
+  /**
+   * Phân tích ảnh với Ollama Vision model (llava).
+   * Yêu cầu model llava phải được pull trước.
+   * 
+   * @param imageBuffer - Ảnh dưới dạng buffer
+   * @param mimeType - MIME type của ảnh
+   * @param prompt - Câu hỏi về ảnh
+   * @returns Phân tích từ model
+   */
+  async analyzeImageWithPrompt(
+    imageBuffer: Buffer,
+    mimeType: string,
+    prompt: string,
+  ): Promise<string> {
+    try {
+      this.logger.debug(`Analyzing image with Ollama Vision (llava): ${mimeType}`);
+      
+      // Convert buffer to base64
+      const base64Image = imageBuffer.toString('base64');
+      
+      // Use llava model for vision
+      const visionModel = 'llava';
+      
+      // Check if llava is available
+      const hasLlava = await this.hasModel(visionModel);
+      if (!hasLlava) {
+        this.logger.warn('llava model not available, falling back to text description');
+        return 'Xin lỗi, model xử lý ảnh (llava) chưa được cài đặt trên server. Vui lòng liên hệ admin.';
+      }
+      
+      const response = await axios.post<OllamaGenerateResponse>(
+        `${this.ollamaUrl}/api/generate`,
+        {
+          model: visionModel,
+          prompt: prompt || 'Mô tả chi tiết nội dung trong ảnh này bằng tiếng Việt.',
+          images: [base64Image],
+          stream: false,
+        },
+        {
+          timeout: 120000, // 2 minutes for image processing
+        },
+      );
+
+      const content = response.data.response || '';
+      this.logger.debug(`Ollama Vision analysis completed: ${content.substring(0, 100)}...`);
+      return content;
+    } catch (error: any) {
+      this.logger.error(`Ollama Vision error: ${error.message}`);
+      throw error;
+    }
+  }
 }

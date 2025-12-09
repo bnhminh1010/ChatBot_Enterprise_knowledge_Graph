@@ -1,17 +1,41 @@
+/**
+ * @fileoverview Ollama Initialization Service - Auto Setup
+ * @module ai/ollama-init.service
+ *
+ * Service tự động kiểm tra, khởi động, và cấu hình Ollama khi startup.
+ * Hỗ trợ auto-start qua Docker nếu Ollama chưa chạy.
+ *
+ * Workflow:
+ * 1. Kiểm tra Ollama đang chạy không
+ * 2. Nếu chưa -> thử auto-start qua Docker
+ * 3. Kiểm tra model đã được pull chưa
+ * 4. Nếu chưa -> tự động pull model
+ *
+ * @author APTX3107 Team
+ */
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import { execSync } from 'child_process';
 
 /**
- * Ollama Initialization Service
- * Automatically checks, starts, and configures Ollama on startup
+ * Service tự động khởi tạo Ollama trên startup.
+ * Implements OnModuleInit để chạy khi module được load.
  */
 @Injectable()
 export class OllamaInitService implements OnModuleInit {
   private readonly logger = new Logger(OllamaInitService.name);
-  private readonly ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+
+  /** URL của Ollama server */
+  private readonly ollamaUrl =
+    process.env.OLLAMA_URL || 'http://localhost:11434';
+
+  /** Model cần sử dụng */
   private readonly ollamaModel = process.env.OLLAMA_MODEL || 'mistral';
 
+  /**
+   * Lifecycle hook chạy khi module được init.
+   * Tự động setup Ollama.
+   */
   async onModuleInit() {
     this.logger.log('='.repeat(60));
     this.logger.log('🚀 Initializing Ollama...');
@@ -29,15 +53,20 @@ export class OllamaInitService implements OnModuleInit {
         if (!started) {
           this.logger.error('❌ Failed to auto-start Ollama');
           this.logger.error('⚠️  MANUAL SETUP REQUIRED:');
-          this.logger.error('1. Install Docker: https://www.docker.com/products/docker-desktop');
-          this.logger.error('2. Run: docker run -d --name ollama -p 11434:11434 -v ollama:/root/.ollama ollama/ollama');
-          this.logger.error('3. Download model: docker exec ollama ollama pull mistral');
+          this.logger.error(
+            '1. Install Docker: https://www.docker.com/products/docker-desktop',
+          );
+          this.logger.error(
+            '2. Run: docker run -d --name ollama -p 11434:11434 -v ollama:/root/.ollama ollama/ollama',
+          );
+          this.logger.error(
+            '3. Download model: docker exec ollama ollama pull mistral',
+          );
           this.logger.error('4. Restart backend: npm run start:dev');
           return;
         }
 
         this.logger.log('✅ Ollama started successfully!');
-        // Wait for Ollama to be ready
         await this.waitForOllama(10);
       } else {
         this.logger.log('✅ Ollama is running!');
@@ -53,7 +82,9 @@ export class OllamaInitService implements OnModuleInit {
         const pulled = await this.pullModel();
         if (!pulled) {
           this.logger.error('❌ Failed to pull model');
-          this.logger.error(`Manual pull: docker exec ollama ollama pull ${this.ollamaModel}`);
+          this.logger.error(
+            `Manual pull: docker exec ollama ollama pull ${this.ollamaModel}`,
+          );
           return;
         }
 
@@ -67,12 +98,16 @@ export class OllamaInitService implements OnModuleInit {
       this.logger.log('='.repeat(60));
     } catch (error) {
       this.logger.error(`⚠️  Ollama initialization warning: ${error}`);
-      this.logger.warn('Chat system will still work, but complex queries may be slower');
+      this.logger.warn(
+        'Chat system will still work, but complex queries may be slower',
+      );
     }
   }
 
   /**
-   * Check if Ollama is running
+   * Kiểm tra Ollama có đang chạy không.
+   *
+   * @returns true nếu server respond
    */
   private async isOllamaRunning(): Promise<boolean> {
     try {
@@ -86,7 +121,10 @@ export class OllamaInitService implements OnModuleInit {
   }
 
   /**
-   * Attempt to auto-start Ollama via Docker
+   * Thử auto-start Ollama qua Docker.
+   * Kiểm tra container đã tồn tại chưa, nếu có thì start, nếu không thì tạo mới.
+   *
+   * @returns true nếu start thành công
    */
   private async autoStartOllama(): Promise<boolean> {
     try {
@@ -94,15 +132,20 @@ export class OllamaInitService implements OnModuleInit {
       try {
         execSync('docker --version', { encoding: 'utf8' });
       } catch {
-        this.logger.warn('Docker not found. Please install Docker and start Ollama manually.');
+        this.logger.warn(
+          'Docker not found. Please install Docker and start Ollama manually.',
+        );
         return false;
       }
 
       // Check if ollama container already exists but is stopped
       try {
-        const containers = execSync('docker ps -a --filter name=ollama --format "{{.Names}}"', {
-          encoding: 'utf8',
-        }).trim();
+        const containers = execSync(
+          'docker ps -a --filter name=ollama --format "{{.Names}}"',
+          {
+            encoding: 'utf8',
+          },
+        ).trim();
 
         if (containers) {
           this.logger.log('Found existing ollama container. Starting it...');
@@ -128,7 +171,10 @@ export class OllamaInitService implements OnModuleInit {
   }
 
   /**
-   * Wait for Ollama to be ready
+   * Đợi Ollama sẵn sàng với retry.
+   *
+   * @param maxAttempts - Số lần thử tối đa
+   * @returns true nếu server sẵn sàng
    */
   private async waitForOllama(maxAttempts: number = 30): Promise<boolean> {
     for (let i = 0; i < maxAttempts; i++) {
@@ -151,7 +197,9 @@ export class OllamaInitService implements OnModuleInit {
   }
 
   /**
-   * Check if model exists
+   * Kiểm tra model đã được pull chưa.
+   *
+   * @returns true nếu model tồn tại
    */
   private async hasModel(): Promise<boolean> {
     try {
@@ -159,7 +207,8 @@ export class OllamaInitService implements OnModuleInit {
       const models = response.data?.models || [];
       return models.some(
         (m: any) =>
-          m.name === this.ollamaModel || m.name.startsWith(this.ollamaModel + ':'),
+          m.name === this.ollamaModel ||
+          m.name.startsWith(this.ollamaModel + ':'),
       );
     } catch (error) {
       return false;
@@ -167,7 +216,9 @@ export class OllamaInitService implements OnModuleInit {
   }
 
   /**
-   * Pull model from Ollama
+   * Pull model từ Ollama registry.
+   *
+   * @returns true nếu pull thành công
    */
   private async pullModel(): Promise<boolean> {
     try {

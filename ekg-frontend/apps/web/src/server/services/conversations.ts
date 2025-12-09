@@ -31,26 +31,37 @@ export interface Conversation {
  */
 export async function getUserConversations(): Promise<Conversation[]> {
   try {
-    const conversations = await apiGet<Conversation[]>("/chat/conversations");
-    return conversations;
+    // Backend returns: { conversations: [...], total: number }
+    const response = await apiGet<{
+      conversations: Conversation[];
+      total: number;
+    }>("/chat/conversations");
+    return response.conversations || [];
   } catch (error) {
     console.error("Error fetching conversations:", error);
     throw error;
   }
 }
-
 /**
  * Lấy chi tiết một conversation
+ * Trả về null nếu conversation không tồn tại (404)
  */
 export async function getConversation(
   conversationId: string
-): Promise<Conversation> {
+): Promise<Conversation | null> {
   try {
     const conversation = await apiGet<Conversation>(
       `/chat/conversations/${conversationId}`
     );
     return conversation;
-  } catch (error) {
+  } catch (error: any) {
+    // 404 = conversation chưa được lưu vào Redis, return null
+    if (
+      error.message?.includes("not found") ||
+      error.message?.includes("404")
+    ) {
+      return null;
+    }
     console.error(`Error fetching conversation ${conversationId}:`, error);
     throw error;
   }

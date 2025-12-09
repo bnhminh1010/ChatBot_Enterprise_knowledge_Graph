@@ -129,7 +129,8 @@ let OllamaInitService = OllamaInitService_1 = class OllamaInitService {
         try {
             const response = await axios_1.default.get(`${this.ollamaUrl}/api/tags`);
             const models = response.data?.models || [];
-            return models.some((m) => m.name === this.ollamaModel || m.name.startsWith(this.ollamaModel + ':'));
+            return models.some((m) => m.name === this.ollamaModel ||
+                m.name.startsWith(this.ollamaModel + ':'));
         }
         catch (error) {
             return false;

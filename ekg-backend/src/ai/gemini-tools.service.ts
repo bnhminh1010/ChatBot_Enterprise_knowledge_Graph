@@ -11,6 +11,7 @@ import { OllamaService } from './ollama.service';
 import { QueryCacheService } from '../chat/services/query-cache.service';
 import { RecommendationService } from '../chat/services/recommendation.service';
 import { SchedulerService } from '../chat/services/scheduler.service';
+import { Neo4jService } from '../core/neo4j/neo4j.service';
 
 export interface ToolDefinition {
   name: string;
@@ -62,6 +63,7 @@ export class GeminiToolsService {
     private readonly queryCacheService: QueryCacheService,
     private readonly recommendationService: RecommendationService,
     private readonly schedulerService: SchedulerService,
+    private readonly neo4jService: Neo4jService,
   ) {}
 
   getTools(): ToolDefinition[] {
@@ -76,6 +78,10 @@ export class GeminiToolsService {
       ...this.getTechnologyTools(),
       ...this.getSkillTools(),
       ...this.getDocumentTools(),
+      // 🏢 COMPANY TOOLS
+      ...this.getCompanyTools(),
+      // 🔍 ADVANCED QUERY TOOLS
+      ...this.getAdvancedQueryTools(),
       // 🎯 SMART FEATURES
       ...this.getRecommendationTools(),
       ...this.getSchedulerTools(),
@@ -538,6 +544,12 @@ export class GeminiToolsService {
           '⚠️ LIST ALL SKILLS ⚠️ Use THIS tool when user asks: "danh sách kỹ năng", "tất cả kỹ năng", "có những kỹ năng gì", "liệt kê kỹ năng", "skill list". Returns: Array of ALL skill objects {id, name, category}. NO LIMIT. IMPORTANT: This tool lists SKILLS ONLY, NOT employees. DO NOT use search_employees tools when user asks for skill list.',
         parameters: { type: 'object', properties: {} },
       },
+      {
+        name: 'count_skills',
+        description:
+          'Đếm TỔNG SỐ KỸ NĂNG trong công ty. USE THIS when: "có bao nhiêu kỹ năng", "tổng số skill", "số lượng kỹ năng". Returns: count number.',
+        parameters: { type: 'object', properties: {} },
+      },
     ];
   }
 
@@ -613,6 +625,125 @@ export class GeminiToolsService {
             },
           },
           required: ['documentName'],
+        },
+      },
+    ];
+  }
+
+  /**
+   * 🏢 COMPANY TOOLS
+   * Thông tin công ty
+   */
+  private getCompanyTools(): ToolDefinition[] {
+    return [
+      {
+        name: 'get_company_info',
+        description:
+          '🏢 LẤY THÔNG TIN CÔNG TY. USE THIS when: "thông tin công ty", "trụ sở", "địa chỉ công ty", ' +
+          '"công ty APTX", "company info", "địa điểm văn phòng". ' +
+          'Trả về: tên, địa chỉ, lĩnh vực, số nhân sự, ngày thành lập.',
+        parameters: { type: 'object', properties: {} },
+      },
+    ];
+  }
+
+  /**
+   * 🔍 ADVANCED QUERY TOOLS
+   * Các truy vấn phức tạp
+   */
+  private getAdvancedQueryTools(): ToolDefinition[] {
+    return [
+      {
+        name: 'find_skills_by_position',
+        description:
+          '🎯 TÌM KỸ NĂNG THEO CHỨC DANH. USE THIS when: "chức danh X yêu cầu kỹ năng gì", ' +
+          '"Backend Developer cần skill gì", "kỹ năng của Position Y". ' +
+          'Trả về danh sách kỹ năng yêu cầu theo chức danh.',
+        parameters: {
+          type: 'object',
+          properties: {
+            positionName: {
+              type: 'string',
+              description: 'Tên chức danh (VD: Backend Developer, QA, PM)',
+            },
+          },
+          required: ['positionName'],
+        },
+      },
+      {
+        name: 'find_most_used_technology',
+        description:
+          '📊 TÌM CÔNG NGHỆ ĐƯỢC SỬ DỤNG NHIỀU NHẤT. USE THIS when: "công nghệ nào dùng nhiều nhất", ' +
+          '"technology phổ biến nhất", "công nghệ được ưa chuộng". ' +
+          'Trả về danh sách công nghệ xếp theo số lượng dự án sử dụng.',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Số lượng kết quả (default: 5)',
+            },
+          },
+        },
+      },
+      {
+        name: 'find_employee_with_most_projects',
+        description:
+          '👤 TÌM NHÂN SỰ THAM GIA NHIỀU DỰ ÁN NHẤT. USE THIS when: "ai tham gia nhiều dự án nhất", ' +
+          '"nhân viên nào làm nhiều project", "nhân sự bận nhất". ' +
+          'Trả về danh sách nhân sự xếp theo số dự án tham gia.',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Số lượng kết quả (default: 5)',
+            },
+          },
+        },
+      },
+      {
+        name: 'find_projects_by_technologies',
+        description:
+          '🔧 TÌM DỰ ÁN THEO NHIỀU CÔNG NGHỆ. USE THIS when: "dự án dùng cả Docker lẫn React", ' +
+          '"project sử dụng A và B", "dự án nào có cả X và Y". ' +
+          'Trả về dự án sử dụng TẤT CẢ các công nghệ được chỉ định.',
+        parameters: {
+          type: 'object',
+          properties: {
+            technologies: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Danh sách tên công nghệ cần tìm (VD: ["Docker", "React"])',
+            },
+          },
+          required: ['technologies'],
+        },
+      },
+      {
+        name: 'execute_cypher_query',
+        description:
+          '🔧 THỰC THI CYPHER QUERY TÙY Ý trên Neo4j. ' +
+          '⚠️ CHỈ DÙNG KHI KHÔNG CÓ TOOL CỤ THỂ PHÙ HỢP. ' +
+          'USE THIS when: câu hỏi phức tạp, truy vấn tùy chỉnh, không có tool nào khớp. ' +
+          'QUAN TRỌNG: Chỉ dùng READ queries (MATCH), KHÔNG dùng WRITE (CREATE/DELETE/SET). ' +
+          'Trả về kết quả raw từ Neo4j.',
+        parameters: {
+          type: 'object',
+          properties: {
+            cypherQuery: {
+              type: 'string',
+              description:
+                'Cypher query để thực thi (VD: "MATCH (n:NhanSu) RETURN n.ho_ten LIMIT 5"). ' +
+                'CHỈ DÙNG READ QUERIES.',
+            },
+            description: {
+              type: 'string',
+              description: 'Mô tả ngắn về mục đích của query (để log)',
+            },
+          },
+          required: ['cypherQuery'],
         },
       },
     ];
@@ -1169,10 +1300,171 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
         return { total: count, message: `Tổng số công nghệ: ${count}` };
       }
 
-      // Skill tools (1 tool)
+      // Skill tools
       if (name === 'list_skills') {
         const result = await this.skillsService.list();
         return { data: result };
+      }
+      if (name === 'count_skills') {
+        const skills = await this.skillsService.list();
+        const count = skills.length;
+        return { total: count, message: `Tổng số kỹ năng: ${count}` };
+      }
+
+      // 🏢 Company tools
+      if (name === 'get_company_info') {
+        // Get APTX company info from Neo4j
+        const result = await this.neo4jService.run(
+          `MATCH (c:CongTy)
+           RETURN {
+             id: c.id,
+             name: c.ten,
+             address: c.dia_chi,
+             field: c.linh_vuc,
+             employeeCount: c.so_nhan_su,
+             founded: c.founded,
+             domain: c.domain
+           } AS company
+           LIMIT 1`
+        );
+        if (result.length === 0) {
+          return { 
+            message: 'Thông tin công ty APTX: 475A Điện Biên Phủ, Bình Thạnh, TP.HCM',
+            data: {
+              name: 'APTX',
+              address: '475A Điện Biên Phủ, Bình Thạnh, TP.HCM',
+              field: 'Công nghệ thông tin'
+            }
+          };
+        }
+        const company = result[0].company;
+        return {
+          data: company,
+          message: `Công ty ${company.name}: ${company.address || 'N/A'}. Lĩnh vực: ${company.field || 'CNTT'}.`
+        };
+      }
+
+      // 🔍 Advanced Query tools
+      if (name === 'find_skills_by_position') {
+        const positionName = args.positionName;
+        const result = await this.neo4jService.run(
+          `MATCH (p:ChucDanh)
+           WHERE toLower(p.ten) CONTAINS toLower($positionName)
+           OPTIONAL MATCH (p)-[:YEU_CAU_KY_NANG]->(k:KyNang)
+           RETURN p.ten AS position, collect(DISTINCT k.ten) AS skills`,
+          { positionName }
+        );
+        if (result.length === 0) {
+          return { data: [], message: `Không tìm thấy chức danh "${positionName}".` };
+        }
+        const skills = result[0].skills.filter(Boolean);
+        return {
+          position: result[0].position,
+          data: skills,
+          message: skills.length > 0 
+            ? `Chức danh "${result[0].position}" yêu cầu: ${skills.join(', ')}`
+            : `Chức danh "${result[0].position}" chưa có kỹ năng yêu cầu được định nghĩa.`
+        };
+      }
+
+      if (name === 'find_most_used_technology') {
+        const limit = args.limit || 5;
+        const result = await this.neo4jService.run(
+          `MATCH (p:DuAn)-[:SU_DUNG_CONG_NGHE]->(t:CongNghe)
+           RETURN t.ten AS technology, count(DISTINCT p) AS projectCount
+           ORDER BY projectCount DESC
+           LIMIT $limit`,
+          { limit: parseInt(limit) }
+        );
+        return {
+          data: result,
+          message: `Top ${result.length} công nghệ phổ biến nhất: ${result.map((r: any) => `${r.technology} (${r.projectCount} dự án)`).join(', ')}`
+        };
+      }
+
+      if (name === 'find_employee_with_most_projects') {
+        const limit = args.limit || 5;
+        const result = await this.neo4jService.run(
+          `MATCH (e:NhanSu)-[:LAM_DU_AN]->(p:DuAn)
+           RETURN e.ho_ten AS name, e.id AS id, count(DISTINCT p) AS projectCount
+           ORDER BY projectCount DESC
+           LIMIT $limit`,
+          { limit: parseInt(limit) }
+        );
+        return {
+          data: result,
+          message: `Top ${result.length} nhân sự tham gia nhiều dự án nhất: ${result.map((r: any) => `${r.name} (${r.projectCount} dự án)`).join(', ')}`
+        };
+      }
+
+      if (name === 'find_projects_by_technologies') {
+        const technologies = args.technologies || [];
+        if (technologies.length === 0) {
+          return { data: [], message: 'Vui lòng cung cấp danh sách công nghệ cần tìm.' };
+        }
+        
+        // Find projects that use ALL specified technologies
+        const result = await this.neo4jService.run(
+          `MATCH (p:DuAn)
+           WHERE ALL(tech IN $technologies WHERE EXISTS {
+             MATCH (p)-[:SU_DUNG_CONG_NGHE]->(t:CongNghe)
+             WHERE toLower(t.ten) CONTAINS toLower(tech)
+           })
+           OPTIONAL MATCH (p)-[:SU_DUNG_CONG_NGHE]->(allTech:CongNghe)
+           RETURN p.ten AS projectName, p.id AS projectId, 
+                  collect(DISTINCT allTech.ten) AS technologies`,
+          { technologies }
+        );
+        return {
+          data: result,
+          message: result.length > 0 
+            ? `Tìm thấy ${result.length} dự án sử dụng cả ${technologies.join(' và ')}: ${result.map((r: any) => r.projectName).join(', ')}`
+            : `Không có dự án nào sử dụng đồng thời ${technologies.join(' và ')}.`
+        };
+      }
+
+      // 🔧 Execute Cypher Query (flexible fallback)
+      if (name === 'execute_cypher_query') {
+        const cypherQuery = args.cypherQuery;
+        const description = args.description || 'Custom query';
+
+        // Security check: Only allow READ queries
+        const queryUpper = cypherQuery.toUpperCase().trim();
+        const forbiddenKeywords = ['CREATE', 'DELETE', 'SET', 'REMOVE', 'MERGE', 'DROP', 'DETACH'];
+        const hasForbidden = forbiddenKeywords.some(keyword => 
+          queryUpper.includes(keyword) && !queryUpper.includes('ON CREATE SET')
+        );
+
+        if (hasForbidden) {
+          return {
+            error: true,
+            message: '⚠️ Chỉ cho phép READ queries (MATCH). Không thể thực hiện WRITE operations.'
+          };
+        }
+
+        this.logger.log(`🔧 Executing custom Cypher: ${description}`);
+        this.logger.debug(`Query: ${cypherQuery}`);
+
+        try {
+          const result = await this.neo4jService.run(cypherQuery);
+          
+          // Format result for readability
+          const formattedResult = result.slice(0, 20); // Limit to 20 rows
+          const truncated = result.length > 20;
+
+          return {
+            data: formattedResult,
+            totalRows: result.length,
+            truncated,
+            message: `Đã thực thi query: ${description}. Tìm thấy ${result.length} kết quả.${truncated ? ' (Hiển thị 20 dòng đầu)' : ''}`
+          };
+        } catch (queryError: any) {
+          this.logger.error(`Cypher query error: ${queryError.message}`);
+          return {
+            error: true,
+            message: `Lỗi thực thi query: ${queryError.message}`
+          };
+        }
       }
 
       // Document tools (2 tools)
@@ -1296,7 +1588,7 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
 
       // 🎯 RECOMMENDATION TOOLS
       if (name === 'recommend_employees_for_project') {
-        const { recommendations, projectInfo } = 
+        const { recommendations, projectInfo } =
           await this.recommendationService.recommendEmployeesForProject(
             args.projectName,
             args.requiredSkills,
@@ -1339,7 +1631,7 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
       }
 
       if (name === 'recommend_training_for_employee') {
-        const { suggestions, employee } = 
+        const { suggestions, employee } =
           await this.recommendationService.recommendTrainingForEmployee(
             args.employeeId,
             args.employeeName,
@@ -1356,14 +1648,15 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
           type: 'training_recommendation',
           employee,
           data: suggestions,
-          message: suggestions.length > 0
-            ? `📚 Đề xuất đào tạo cho ${employee.name}:`
-            : `${employee.name} đã có đầy đủ các kỹ năng trending trong công ty!`,
+          message:
+            suggestions.length > 0
+              ? `📚 Đề xuất đào tạo cho ${employee.name}:`
+              : `${employee.name} đã có đầy đủ các kỹ năng trending trong công ty!`,
         };
       }
 
       if (name === 'recommend_projects_for_employee') {
-        const { recommendations, employee } = 
+        const { recommendations, employee } =
           await this.recommendationService.recommendProjectsForEmployee(
             args.employeeId,
             args.employeeName,
@@ -1381,14 +1674,15 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
           type: 'project_recommendation',
           employee,
           data: recommendations,
-          message: recommendations.length > 0
-            ? `🚀 Gợi ý ${recommendations.length} dự án phù hợp cho ${employee.name}:`
-            : `Không có dự án phù hợp hoặc ${employee.name} đã tham gia tất cả dự án.`,
+          message:
+            recommendations.length > 0
+              ? `🚀 Gợi ý ${recommendations.length} dự án phù hợp cho ${employee.name}:`
+              : `Không có dự án phù hợp hoặc ${employee.name} đã tham gia tất cả dự án.`,
         };
       }
 
       if (name === 'find_employees_needing_training') {
-        const { employees, trendingSkills } = 
+        const { employees, trendingSkills } =
           await this.recommendationService.findEmployeesNeedingTraining(
             args.limit || 10,
           );
@@ -1397,9 +1691,10 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
           type: 'training_needs_report',
           trendingSkills,
           data: employees,
-          message: employees.length > 0
-            ? `📊 Tìm thấy ${employees.length} nhân viên cần đào tạo bổ sung. Trending skills: ${trendingSkills.join(', ')}`
-            : `Tất cả nhân viên đã có đầy đủ các kỹ năng trending!`,
+          message:
+            employees.length > 0
+              ? `📊 Tìm thấy ${employees.length} nhân viên cần đào tạo bổ sung. Trending skills: ${trendingSkills.join(', ')}`
+              : `Tất cả nhân viên đã có đầy đủ các kỹ năng trending!`,
         };
       }
 
@@ -1462,16 +1757,19 @@ Trả lời bằng tiếng Việt, ngắn gọn và chính xác:`;
         );
 
         const summary = {
-          available: availability.filter(a => a.availability === 'available').length,
-          busy: availability.filter(a => a.availability === 'busy').length,
-          overloaded: availability.filter(a => a.availability === 'overloaded').length,
+          available: availability.filter((a) => a.availability === 'available')
+            .length,
+          busy: availability.filter((a) => a.availability === 'busy').length,
+          overloaded: availability.filter(
+            (a) => a.availability === 'overloaded',
+          ).length,
         };
 
         return {
           type: 'team_availability',
           data: availability,
           summary,
-          message: args.departmentName 
+          message: args.departmentName
             ? `📊 Workload của team ${args.departmentName}:`
             : `📊 Workload toàn công ty:`,
         };

@@ -100,8 +100,19 @@ export function useChatHistory() {
 
   const deleteChat = useCallback(async (chatId: string) => {
     try {
-      // Gọi API để xóa từ Redis
-      await deleteConversationAPI(chatId);
+      // Tìm chat trong danh sách
+      const chatToDelete = chats.find((c) => c.id === chatId);
+      
+      // Chỉ gọi API nếu chat có messages (đã được lưu vào Redis)
+      // Chat mới tạo local (không có messages) không cần gọi API
+      if (chatToDelete && chatToDelete.messages && chatToDelete.messages.length > 0) {
+        try {
+          await deleteConversationAPI(chatId);
+        } catch (apiErr) {
+          // Nếu API fail (404), vẫn xóa local
+          console.warn('API delete failed, removing locally:', apiErr);
+        }
+      }
 
       // Xóa local
       const filteredChats = chats.filter((chat) => chat.id !== chatId);

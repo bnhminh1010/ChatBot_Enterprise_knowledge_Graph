@@ -1,3 +1,19 @@
+/**
+ * @fileoverview S3 Service - AWS S3 Storage Operations
+ * @module aws/s3.service
+ * 
+ * Service xử lý upload/download files với AWS S3.
+ * Hỗ trợ multi-part upload cho files lớn với retry logic.
+ * 
+ * Features:
+ * - Simple upload cho files < 50MB
+ * - Multi-part upload cho files >= 50MB
+ * - Pre-signed URLs cho secure downloads
+ * - Server-side encryption (SSE-S3)
+ * - Retry logic với exponential backoff
+ * 
+ * @author APTX3107 Team
+ */
 import {
   Injectable,
   Logger,
@@ -16,6 +32,9 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { awsConfig } from './config/aws.config';
 import { Readable } from 'stream';
 
+/**
+ * Kết quả upload file.
+ */
 export interface UploadResult {
   key: string;
   bucket: string;
@@ -23,6 +42,13 @@ export interface UploadResult {
   etag?: string;
 }
 
+/**
+ * Service quản lý operations với AWS S3.
+ * 
+ * @example
+ * const result = await s3Service.uploadFile(buffer, 'path/to/file.pdf', 'application/pdf');
+ * const url = await s3Service.getSignedUrl(result.key);
+ */
 @Injectable()
 export class S3Service {
   private readonly logger = new Logger(S3Service.name);
@@ -42,9 +68,15 @@ export class S3Service {
   }
 
   /**
-   * Upload file to S3 with auto multi-part support
+   * Upload file lên S3 với auto multi-part support.
    * - Files < 50MB: Simple PUT
-   * - Files >= 50MB: Multi-part upload with retry logic
+   * - Files >= 50MB: Multi-part upload với retry logic
+   * 
+   * @param fileBuffer - Buffer chứa nội dung file
+   * @param key - S3 key (path) cho file
+   * @param contentType - MIME type của file
+   * @returns Upload result với key, bucket, location
+   * @throws InternalServerErrorException nếu upload thất bại
    */
   async uploadFile(
     fileBuffer: Buffer,
@@ -57,7 +89,6 @@ export class S3Service {
         `Uploading file to S3: ${key} (${(fileSize / 1024 / 1024).toFixed(2)}MB)`,
       );
 
-      // Decide upload strategy based on file size
       if (fileSize >= awsConfig.s3.multipartThreshold) {
         return await this.uploadMultipart(fileBuffer, key, contentType);
       } else {
@@ -72,7 +103,7 @@ export class S3Service {
   }
 
   /**
-   * Simple upload for small files (< 50MB)
+   * Simple upload cho small files (< 50MB).
    */
   private async uploadSimple(
     fileBuffer: Buffer,
@@ -84,7 +115,7 @@ export class S3Service {
       Key: key,
       Body: fileBuffer,
       ContentType: contentType,
-      ServerSideEncryption: 'AES256', // SSE-S3
+      ServerSideEncryption: 'AES256',
     };
 
     const command = new PutObjectCommand(params);
@@ -101,8 +132,8 @@ export class S3Service {
   }
 
   /**
-   * Multi-part upload for large files (>= 50MB)
-   * with retry logic and exponential backoff
+   * Multi-part upload cho large files (>= 50MB).
+   * Với retry logic và exponential backoff.
    */
   private async uploadMultipart(
     fileBuffer: Buffer,
@@ -118,14 +149,13 @@ export class S3Service {
         Key: key,
         Body: fileBuffer,
         ContentType: contentType,
-        ServerSideEncryption: 'AES256', // SSE-S3
+        ServerSideEncryption: 'AES256',
       },
-      queueSize: 4, // Concurrent uploads
-      partSize: awsConfig.s3.multipartChunkSize, // 10MB chunks
+      queueSize: 4,
+      partSize: awsConfig.s3.multipartChunkSize,
       leavePartsOnError: false,
     });
 
-    // Track progress
     upload.on('httpUploadProgress', (progress) => {
       const percent =
         progress.loaded && progress.total
@@ -134,7 +164,6 @@ export class S3Service {
       this.logger.debug(`Upload progress: ${percent}%`);
     });
 
-    // Execute upload with retry logic
     let retryCount = 0;
     const maxRetries = awsConfig.s3.uploadMaxRetries;
 
@@ -162,7 +191,6 @@ export class S3Service {
           throw error;
         }
 
-        // Exponential backoff: 1s, 2s, 4s
         const delayMs = Math.pow(2, retryCount - 1) * 1000;
         this.logger.warn(
           `Upload failed, retry ${retryCount}/${maxRetries} in ${delayMs}ms...`,
@@ -175,7 +203,11 @@ export class S3Service {
   }
 
   /**
-   * Get pre-signed URL for downloading file
+   * Tạo pre-signed URL để download file.
+   * 
+   * @param key - S3 key của file
+   * @param expiresIn - Thời gian hết hạn (seconds), mặc định theo config
+   * @returns Pre-signed URL
    */
   async getSignedUrl(key: string, expiresIn?: number): Promise<string> {
     try {
@@ -202,7 +234,11 @@ export class S3Service {
   }
 
   /**
-   * Get object from S3 as Buffer
+   * Download object từ S3 dạng Buffer.
+   * 
+   * @param key - S3 key của file
+   * @returns Buffer chứa nội dung file
+   * @throws NotFoundException nếu file không tồn tại
    */
   async getObject(key: string): Promise<Buffer> {
     try {
@@ -213,7 +249,6 @@ export class S3Service {
 
       const response = await this.s3Client.send(command);
 
-      // Convert stream to buffer
       const stream = response.Body as Readable;
       const chunks: Uint8Array[] = [];
 
@@ -229,7 +264,6 @@ export class S3Service {
 
       return buffer;
     } catch (error: any) {
-      // Handle specific S3 errors
       if (error?.name === 'NoSuchKey' || error?.Code === 'NoSuchKey') {
         this.logger.warn(`S3 object not found: ${key}`);
         throw new NotFoundException(
@@ -242,7 +276,9 @@ export class S3Service {
   }
 
   /**
-   * Delete object from S3
+   * Xóa file từ S3.
+   * 
+   * @param key - S3 key của file
    */
   async deleteFile(key: string): Promise<void> {
     try {
@@ -261,7 +297,7 @@ export class S3Service {
   }
 
   /**
-   * Helper: Delay for retry logic
+   * Helper: Delay cho retry logic.
    */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,7 +1,7 @@
 /**
  * @fileoverview Gemini AI Service - Integration với Google Generative AI
  * @module ai/gemini.service
- * 
+ *
  * Service này cung cấp các phương thức để tương tác với Google Gemini API:
  * - generateResponse: Tạo response từ prompt đơn giản
  * - generateResponseWithHistory: Tạo response với conversation history
@@ -11,7 +11,7 @@
  * - extractInfo: Trích xuất thông tin từ text
  * - classify: Phân loại text
  * - summarize: Tóm tắt text
- * 
+ *
  * @requires @google/generative-ai
  * @author APTX3107 Team
  */
@@ -21,11 +21,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 /**
  * Service tích hợp với Google Gemini AI.
  * Hỗ trợ function calling, conversation history, và streaming.
- * 
+ *
  * @example
  * // Basic usage
  * const response = await geminiService.generateResponse('Hello');
- * 
+ *
  * @example
  * // With tools (function calling)
  * const result = await geminiService.generateResponseWithTools(prompt, tools, context);
@@ -33,23 +33,23 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  
+
   /** Model mặc định khi không có config từ env */
   private readonly DEFAULT_MODEL = 'gemini-2.5-pro';
-  
+
   /** Google Generative AI client instance */
   private client: GoogleGenerativeAI;
-  
+
   /** Model instance đang được sử dụng */
   private model: any;
-  
+
   /** Tên model đang active (có thể khác DEFAULT_MODEL nếu fallback) */
   private activeModelName: string;
 
   /**
    * Khởi tạo Gemini client và model.
    * Tự động fallback sang DEFAULT_MODEL nếu model được chỉ định không tồn tại.
-   * 
+   *
    * @throws {Error} Nếu GEMINI_API_KEY không được định nghĩa
    * @throws {Error} Nếu không thể khởi tạo model (cả primary và fallback)
    */
@@ -66,7 +66,9 @@ export class GeminiService {
     this.client = new GoogleGenerativeAI(apiKey);
     try {
       this.model = this.client.getGenerativeModel({ model: modelName });
-      this.logger.log(`Gemini service initialized with model: ${this.activeModelName}`);
+      this.logger.log(
+        `Gemini service initialized with model: ${this.activeModelName}`,
+      );
     } catch (error: any) {
       const errorMsg = error?.message || 'Unknown error';
       this.logger.error(
@@ -101,12 +103,12 @@ export class GeminiService {
   /**
    * Tạo response từ Gemini cho các query phức tạp.
    * Phương thức cơ bản nhất để gọi Gemini API.
-   * 
+   *
    * @param {string} prompt - Câu hỏi hoặc prompt cần xử lý
    * @param {string} [context] - Context bổ sung (system prompt, background info)
    * @returns {Promise<string>} Response text từ Gemini
    * @throws {Error} Gemini API errors với mã lỗi cụ thể (400, 401, 404, 429, 500)
-   * 
+   *
    * @example
    * const response = await geminiService.generateResponse(
    *   'Ai là manager của dự án APTX?',
@@ -204,7 +206,7 @@ export class GeminiService {
   /**
    * Wrapper để phân loại query.
    * Sử dụng bởi GeminiQueryClassifierService để xác định loại câu hỏi.
-   * 
+   *
    * @param {string} prompt - Prompt chứa query cần phân loại
    * @returns {Promise<string>} Kết quả phân loại từ Gemini
    */
@@ -216,12 +218,12 @@ export class GeminiService {
    * Tạo response với conversation history.
    * Sử dụng Gemini Chat API để duy trì context qua nhiều lượt họi thoại.
    * Tối ưu cho enterprise chatbot với Vietnamese system prompt.
-   * 
+   *
    * @param {string} currentMessage - Tin nhắn hiện tại cần trả lời
    * @param {Array<{role: 'user'|'assistant', content: string}>} conversationHistory - Lịch sử hội thoại
    * @param {string} [databaseContext] - Dữ liệu context từ database (Neo4j query results)
    * @returns {Promise<string>} Response text
-   * 
+   *
    * @example
    * const response = await geminiService.generateResponseWithHistory(
    *   'Nhân viên nào biết React?',
@@ -378,12 +380,12 @@ export class GeminiService {
   /**
    * Trích xuất thông tin cấu trúc từ văn bản.
    * Sử dụng Gemini để parse text thành JSON theo schema định sẵn.
-   * 
+   *
    * @param {string} text - Văn bản cần trích xuất thông tin
    * @param {string} schema - JSON schema mô tả cấu trúc output mong muốn
    * @returns {Promise<Record<string, any>>} Object JSON được trích xuất
    * @throws {Error} Nếu không thể parse JSON từ response
-   * 
+   *
    * @example
    * const info = await geminiService.extractInfo(
    *   'Nguyễn Văn A, 25 tuổi, làm ở phòng kỹ thuật',
@@ -422,11 +424,11 @@ Return only valid JSON.`;
   /**
    * Phân loại text vào các categories định sẵn.
    * Sử dụng cho intent detection, sentiment analysis, v.v.
-   * 
+   *
    * @param {string} text - Văn bản cần phân loại
    * @param {string[]} categories - Danh sách các category có thể
    * @returns {Promise<string>} Tên category được chọn
-   * 
+   *
    * @example
    * const category = await geminiService.classify(
    *   'Tôi muốn biết ai là manager',
@@ -452,26 +454,26 @@ Return only the category name.`;
   /**
    * Tạo response với Function Calling (Tools).
    * Đây là method chính để thực hiện agent-style interactions.
-   * 
+   *
    * **Flow hoạt động:**
    * 1. Gửi prompt + tools đến Gemini
    * 2. Nếu Gemini trả về function_call -> caller thực thi tool -> gọi continueChatWithToolResults
    * 3. Nếu Gemini trả về text -> trả luôn kết quả
-   * 
+   *
    * @param {string} prompt - Câu hỏi/yêu cầu từ user
    * @param {any[]} tools - Danh sách tool definitions (từ GeminiToolsService.getTools())
    * @param {string} [context] - System context/instructions
    * @param {Array} [history] - Lịch sử hội thoại trước đó
    * @returns {Promise<{type: 'text'|'function_call', content?: string, functionCalls?: Array, chatSession?: any}>}
    * @throws {Error} Với 429 errors (rate limit) - để caller có thể fallback
-   * 
+   *
    * @example
    * const result = await geminiService.generateResponseWithTools(
    *   'Ai biết React trong phòng Frontend?',
    *   geminiToolsService.getTools(),
    *   'Bạn là trợ lý AI cho hệ thống quản lý nhân sự'
    * );
-   * 
+   *
    * if (result.type === 'function_call') {
    *   // Execute tools and continue chat
    * }
@@ -588,7 +590,11 @@ Return only the category name.`;
       );
 
       // 🆕 THROW 429 errors to allow ChatService to fallback to Ollama
-      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('Too Many Requests')) {
+      if (
+        error.message?.includes('429') ||
+        error.message?.includes('quota') ||
+        error.message?.includes('Too Many Requests')
+      ) {
         throw error; // Let ChatService handle this and fallback to Ollama
       }
 
@@ -607,16 +613,16 @@ Return only the category name.`;
   /**
    * Tiếp tục hội thoại sau khi thực thi tools.
    * Gửi kết quả từ tool execution về Gemini để tạo response cuối cùng.
-   * 
+   *
    * **Lưu ý:**
    * - Method này có thể trả về thêm function_call (nếu Gemini cần thêm tools)
    * - Có fallback xử lý khi Gemini trả về empty response
-   * 
+   *
    * @param {any} chatSession - Chat session từ generateResponseWithTools()
    * @param {Array<{name: string, result: any}>} toolResults - Kết quả từ tool execution
    * @returns {Promise<{type: 'text'|'function_call', content?: string, functionCalls?: Array}>}
    * @throws {Error} Với 429 errors (rate limit) - để caller có thể fallback
-   * 
+   *
    * @example
    * const toolResults = [
    *   { name: 'search_employees', result: { data: [...] } }
@@ -767,7 +773,11 @@ Return only the category name.`;
       );
 
       // 🆕 THROW 429 errors to allow ChatService to fallback to Ollama
-      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('Too Many Requests')) {
+      if (
+        error.message?.includes('429') ||
+        error.message?.includes('quota') ||
+        error.message?.includes('Too Many Requests')
+      ) {
         throw error; // Let ChatService handle this and fallback to Ollama
       }
 
@@ -785,11 +795,11 @@ Return only the category name.`;
 
   /**
    * Tóm tắt văn bản dài thành ngắn hơn.
-   * 
+   *
    * @param {string} text - Văn bản cần tóm tắt
    * @param {number} [maxLength=100] - Số ký tự tối đa của bản tóm tắt
    * @returns {Promise<string>} Văn bản đã được tóm tắt
-   * 
+   *
    * @example
    * const summary = await geminiService.summarize(longReport, 200);
    */
@@ -803,6 +813,66 @@ ${text}`;
       return result.response.text();
     } catch (error) {
       this.logger.error(`Failed to summarize text with Gemini: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Phân tích ảnh với Gemini Vision API.
+   * Hỗ trợ xử lý ảnh kèm prompt từ user.
+   *
+   * @param {Buffer} imageBuffer - Ảnh dưới dạng buffer
+   * @param {string} mimeType - MIME type của ảnh (image/jpeg, image/png, etc.)
+   * @param {string} prompt - Câu hỏi hoặc yêu cầu về ảnh
+   * @returns {Promise<string>} Phân tích từ Gemini
+   *
+   * @example
+   * const analysis = await geminiService.analyzeImageWithPrompt(
+   *   imageBuffer,
+   *   'image/jpeg',
+   *   'Mô tả chi tiết nội dung trong ảnh này'
+   * );
+   */
+  async analyzeImageWithPrompt(
+    imageBuffer: Buffer,
+    mimeType: string,
+    prompt: string,
+  ): Promise<string> {
+    try {
+      this.logger.debug(`Analyzing image with Gemini Vision: ${mimeType}`);
+
+      // Convert buffer to base64
+      const base64Image = imageBuffer.toString('base64');
+
+      // Create content with inline image data
+      const imagePart = {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType,
+        },
+      };
+
+      const textPart = {
+        text:
+          prompt || 'Mô tả chi tiết nội dung trong ảnh này bằng tiếng Việt.',
+      };
+
+      // Use gemini-1.5-flash for vision (or gemini-2.0-flash-exp)
+      const visionModel = this.client.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp', // Supports vision
+      });
+
+      const result = await visionModel.generateContent([textPart, imagePart]);
+      const response = result.response.text();
+
+      this.logger.debug(
+        `Vision analysis completed: ${response.substring(0, 100)}...`,
+      );
+      return response;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to analyze image with Gemini Vision: ${error.message}`,
+      );
       throw error;
     }
   }

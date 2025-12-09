@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Departments Module - Department Entity Management
+ * @module departments/departments.module
+ *
+ * Module quản lý Department entity (Phòng ban).
+ *
+ * @author APTX3107 Team
+ */
 import { Module } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { DepartmentsController } from './departments.controller';

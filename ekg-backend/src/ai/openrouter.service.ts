@@ -1,16 +1,16 @@
 /**
  * @fileoverview OpenRouter Service - Fallback LLM Provider
  * @module ai/openrouter.service
- * 
+ *
  * Service tích hợp với OpenRouter.ai làm fallback LLM provider.
  * Hỗ trợ function calling và compatible với Gemini response format.
- * 
+ *
  * Tính năng:
  * - Function calling (tools)
  * - Conversation history
  * - Rate limit handling
  * - Compatible response format với GeminiService
- * 
+ *
  * @author APTX3107 Team
  */
 import { Injectable, Logger } from '@nestjs/common';
@@ -51,7 +51,7 @@ interface OpenRouterResponse {
 /**
  * Service tích hợp với OpenRouter.ai.
  * Sử dụng làm fallback khi Gemini gặp rate limit (429).
- * 
+ *
  * @example
  * if (openRouterService.isAvailable()) {
  *   const result = await openRouterService.generateResponseWithTools(prompt, tools);
@@ -60,16 +60,16 @@ interface OpenRouterResponse {
 @Injectable()
 export class OpenRouterService {
   private readonly logger = new Logger(OpenRouterService.name);
-  
+
   /** Axios client với base config */
   private client: AxiosInstance;
-  
+
   /** API key (null nếu chưa config) */
   private apiKey: string | null;
-  
+
   /** OpenRouter API base URL */
   private readonly baseUrl = 'https://openrouter.ai/api/v1';
-  
+
   /** Model mặc định */
   private readonly defaultModel =
     process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free';
@@ -102,7 +102,7 @@ export class OpenRouterService {
 
   /**
    * Kiểm tra OpenRouter có khả dụng không (có API key).
-   * 
+   *
    * @returns true nếu có API key
    */
   isAvailable(): boolean {
@@ -112,7 +112,7 @@ export class OpenRouterService {
   /**
    * Tạo response với function calling (tools).
    * Format compatible với GeminiService để dễ dàng switch.
-   * 
+   *
    * @param prompt - Câu hỏi từ user
    * @param tools - Danh sách tools (Gemini format)
    * @param context - System context
@@ -221,7 +221,7 @@ export class OpenRouterService {
 
   /**
    * Tiếp tục conversation sau khi thực thi tools.
-   * 
+   *
    * @param previousMessages - Messages trước đó
    * @param toolResults - Kết quả từ tool execution
    * @param tools - Danh sách tools (để tiếp tục nếu cần)
@@ -304,7 +304,7 @@ export class OpenRouterService {
 
   /**
    * Tạo text response đơn giản (không có tools).
-   * 
+   *
    * @param prompt - Prompt cần generate
    * @param context - System context
    * @returns Generated text
@@ -333,6 +333,70 @@ export class OpenRouterService {
       return response.data.choices?.[0]?.message?.content || '';
     } catch (error: any) {
       this.logger.error(`OpenRouter generate error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Phân tích ảnh với OpenRouter Vision API.
+   * Sử dụng model hỗ trợ vision như llava hoặc gpt-4-vision.
+   *
+   * @param imageBuffer - Ảnh dưới dạng buffer
+   * @param mimeType - MIME type của ảnh
+   * @param prompt - Câu hỏi về ảnh
+   * @returns Phân tích từ model
+   */
+  async analyzeImageWithPrompt(
+    imageBuffer: Buffer,
+    mimeType: string,
+    prompt: string,
+  ): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('OpenRouter API key not configured');
+    }
+
+    try {
+      this.logger.debug(`Analyzing image with OpenRouter Vision: ${mimeType}`);
+
+      // Convert buffer to base64 data URL
+      const base64Image = imageBuffer.toString('base64');
+      const dataUrl = `data:${mimeType};base64,${base64Image}`;
+
+      // Use a vision-capable model
+      const visionModel = 'google/gemini-flash-1.5'; // Free vision model on OpenRouter
+
+      const response = await this.client.post('/chat/completions', {
+        model: visionModel,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text:
+                  prompt ||
+                  'Mô tả chi tiết nội dung trong ảnh này bằng tiếng Việt.',
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: dataUrl,
+                },
+              },
+            ],
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 2048,
+      });
+
+      const content = response.data.choices?.[0]?.message?.content || '';
+      this.logger.debug(
+        `OpenRouter Vision analysis completed: ${content.substring(0, 100)}...`,
+      );
+      return content;
+    } catch (error: any) {
+      this.logger.error(`OpenRouter Vision error: ${error.message}`);
       throw error;
     }
   }

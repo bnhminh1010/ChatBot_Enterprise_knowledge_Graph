@@ -1,3 +1,23 @@
+/**
+ * @fileoverview Chat Module - Chatbot Core Orchestration
+ * @module chat/chat.module
+ * 
+ * Module chính quản lý chatbot functionality.
+ * Kết hợp AI services, entity services, và các utility services.
+ * 
+ * Components:
+ * - Controllers: ChatController, ConversationsController
+ * - Core: ChatService (xử lý query chính)
+ * - Cache: CacheService, QueryCacheService, ContextCacheService
+ * - Context: ContextCompressionService, DatabaseContextService
+ * - History: ConversationHistoryService, RedisConversationService
+ * - RAG: OllamaRAGService, ChromaIndexingService
+ * - Analysis: QueryAnalyzerService
+ * - User: UserPreferenceService, SuggestedQuestionsService
+ * - Data: GraphDataExtractor, RecommendationService
+ * 
+ * @author APTX3107 Team
+ */
 import { Module, forwardRef } from '@nestjs/common';
 import { ChatController } from './chat.controller';
 import { ConversationsController } from './controllers/conversations.controller';
@@ -30,13 +50,17 @@ import { PositionsModule } from '../positions/positions.module';
 import { TechnologiesModule } from '../technologies/technologies.module';
 import { DocumentsModule } from '../documents/documents.module';
 
+/**
+ * Module quản lý toàn bộ chatbot functionality.
+ * Là module trung tâm kết nối AI, data, và user interface.
+ */
 @Module({
   imports: [
     AiModule,
     EmployeesModule,
     SkillsModule,
     DepartmentsModule,
-    forwardRef(() => ProjectsModule), // Use forwardRef to avoid circular dependency
+    forwardRef(() => ProjectsModule), // Break circular dependency
     SearchModule,
     Neo4jModule,
     PositionsModule,
@@ -45,21 +69,28 @@ import { DocumentsModule } from '../documents/documents.module';
   ],
   controllers: [ChatController, ConversationsController],
   providers: [
+    // Core
     ChatService,
+    // Cache & Performance
     CacheService,
     MetricsService,
-    ConversationHistoryService,
-    RedisConversationService,
-    OllamaRAGService,
-    ChromaIndexingService,
-    UploadIntentHandlerService,
-    QueryAnalyzerService,
     QueryCacheService,
     ContextCacheService,
-    ContextCompressionService, // Phase 3: Context compression
-    UserPreferenceService, // Phase 3: User preferences
-    SuggestedQuestionsService, // Phase 4: Follow-up suggestions
-    DatabaseContextService, // Schema-aware agent context
+    ContextCompressionService,
+    // Conversation Management
+    ConversationHistoryService,
+    RedisConversationService,
+    // RAG & Indexing
+    OllamaRAGService,
+    ChromaIndexingService,
+    // Query Processing
+    QueryAnalyzerService,
+    UploadIntentHandlerService,
+    // User Experience
+    UserPreferenceService,
+    SuggestedQuestionsService,
+    // Data Services
+    DatabaseContextService,
     GraphDataExtractor,
     RecommendationService,
     SchedulerService,

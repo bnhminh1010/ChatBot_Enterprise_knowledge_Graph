@@ -1,17 +1,50 @@
+/**
+ * @fileoverview Auth Service - Authentication Logic
+ * @module auth/auth.service
+ *
+ * Service xử lý logic authentication.
+ * Bao gồm login, logout, refresh token, và validation.
+ *
+ * Token Strategy:
+ * - Access token: JWT, 15 phút
+ * - Refresh token: UUID, lưu trong Redis, 7 ngày
+ *
+ * @author APTX3107 Team
+ */
 import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Service xử lý authentication với JWT và refresh tokens.
+ *
+ * @example
+ * const result = await authService.login(email, password);
+ * // { access_token, refresh_token, user }
+ */
 @Injectable()
 export class AuthService {
+  /**
+   * @param usersService - Service quản lý users
+   * @param jwtService - JWT service từ @nestjs/jwt
+   * @param redis - Redis client để lưu refresh tokens
+   */
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
   ) {}
 
+  /**
+   * Validate user credentials.
+   *
+   * @param email - Email của user
+   * @param password - Password cần validate
+   * @returns User object (không có password) hoặc null nếu invalid
+   * @throws UnauthorizedException nếu tài khoản bị khóa
+   */
   async validateUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
@@ -23,7 +56,6 @@ export class AuthService {
       throw new UnauthorizedException('Tài khoản đã bị khóa');
     }
 
-    // Validate password
     const isPasswordValid = await this.usersService.validatePassword(
       password,
       user.password,
@@ -34,11 +66,18 @@ export class AuthService {
       return null;
     }
 
-    // Remove password from user object
     const { password: _, ...result } = user;
     return result;
   }
 
+  /**
+   * Login user và tạo tokens.
+   *
+   * @param email - Email của user
+   * @param password - Password
+   * @returns Object chứa access_token, refresh_token và user info
+   * @throws UnauthorizedException nếu credentials không đúng
+   */
   async login(email: string, password: string) {
     const user = await this.validateUser(email, password);
 
@@ -62,8 +101,8 @@ export class AuthService {
     // Store refresh token in Redis (7 days TTL)
     await this.redis.setex(
       `refresh:${refresh_token}`,
-      7 * 24 * 60 * 60, // 7 days in seconds
-      email, // Store email instead of username
+      7 * 24 * 60 * 60, // 7 days
+      email,
     );
 
     return {
@@ -78,21 +117,25 @@ export class AuthService {
     };
   }
 
+  /**
+   * Refresh access token sử dụng refresh token.
+   *
+   * @param refreshToken - Refresh token từ cookie
+   * @returns Object chứa access_token mới và user info
+   * @throws UnauthorizedException nếu refresh token không hợp lệ
+   */
   async refresh(refreshToken: string) {
-    // Get email from Redis
     const email = await this.redis.get(`refresh:${refreshToken}`);
 
     if (!email) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Get fresh user data
     const user = await this.usersService.findByEmail(email);
     if (!user || user.trangThai !== 'Active') {
       throw new UnauthorizedException('User không hợp lệ');
     }
 
-    // Generate new access token
     const payload = {
       email: user.email,
       username: user.username,
@@ -111,11 +154,21 @@ export class AuthService {
     };
   }
 
+  /**
+   * Logout user bằng cách xóa refresh token.
+   *
+   * @param refreshToken - Refresh token cần xóa
+   */
   async logout(refreshToken: string) {
-    // Delete refresh token from Redis
     await this.redis.del(`refresh:${refreshToken}`);
   }
 
+  /**
+   * Lấy role của user theo email.
+   *
+   * @param email - Email của user
+   * @returns Role string hoặc null
+   */
   async getUserRole(email: string): Promise<string | null> {
     const user = await this.usersService.findByEmail(email);
     return user?.role || null;

@@ -1,3 +1,16 @@
+/**
+ * @fileoverview Documents Module - Document Entity Management
+ * @module documents/documents.module
+ *
+ * Module quản lý Document entity.
+ * Bao gồm upload, download, và đọc nội dung documents.
+ *
+ * Components:
+ * - DocumentsService: CRUD operations
+ * - DocumentReaderService: Đọc và parse nội dung files
+ *
+ * @author APTX3107 Team
+ */
 import { Module } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
 import { DocumentsController } from './documents.controller';

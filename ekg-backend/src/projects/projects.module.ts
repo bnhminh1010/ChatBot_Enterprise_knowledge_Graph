@@ -1,3 +1,12 @@
+/**
+ * @fileoverview Projects Module - Project Entity Management
+ * @module projects/projects.module
+ *
+ * Module quản lý Project entity (Dự án).
+ * Sử dụng forwardRef để xử lý circular dependency với ChatModule.
+ *
+ * @author APTX3107 Team
+ */
 import { Module, forwardRef } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';

@@ -49,19 +49,45 @@ export class RedisConversationService {
 
   /**
    * Create new conversation or get existing
+   * Sử dụng conversationId từ frontend nếu có, để đảm bảo frontend và Redis dùng chung ID
    */
   async getOrCreateConversation(
     userId: string,
     conversationId?: string,
   ): Promise<string> {
+    // Nếu có conversationId, check xem đã tồn tại chưa
     if (conversationId) {
       const exists = await this.redis.exists(`conversation:${conversationId}`);
       if (exists) {
         return conversationId;
       }
+
+      // ID chưa tồn tại → tạo mới với ĐÚNG ID từ frontend
+      // (Đảm bảo frontend và backend dùng chung ID)
+      const conversation: Conversation = {
+        id: conversationId,
+        userId,
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      await this.redis.setex(
+        `conversation:${conversationId}`,
+        this.TTL_SECONDS,
+        JSON.stringify(conversation),
+      );
+
+      // Index by user
+      await this.redis.sadd(`user:${userId}:conversations`, conversationId);
+
+      this.logger.debug(
+        `Created conversation ${conversationId} for user ${userId}`,
+      );
+      return conversationId;
     }
 
-    // Create new conversation
+    // Không có conversationId → tạo mới với ID random
     const newId = `CONV_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const conversation: Conversation = {
       id: newId,

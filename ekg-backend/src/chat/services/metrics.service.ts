@@ -1,11 +1,29 @@
+/**
+ * @fileoverview Metrics Service - Chat Performance Metrics
+ * @module chat/services/metrics.service
+ *
+ * Service thu thập và thống kê performance metrics của chatbot.
+ * Lưu trữ in-memory, giới hạn 1000 records.
+ *
+ * @author APTX3107 Team
+ */
 import { Injectable } from '@nestjs/common';
 import { ChatMetrics } from '../interfaces/chat-metrics.interface';
 
+/**
+ * Service thu thập chat metrics.
+ */
 @Injectable()
 export class MetricsService {
+  /** Lịch sử metrics */
   private metricsHistory: ChatMetrics[] = [];
+
+  /** Số metrics tối đa lưu trữ */
   private readonly MAX_METRICS = 1000;
 
+  /**
+   * Ghi log một metrics entry.
+   */
   log(metrics: ChatMetrics): void {
     this.metricsHistory.push(metrics);
     if (this.metricsHistory.length > this.MAX_METRICS) {
@@ -13,6 +31,11 @@ export class MetricsService {
     }
   }
 
+  /**
+   * Lấy thống kê tổng hợp.
+   *
+   * @returns Object chứa total, success, failed, cache hit rate, avg time, breakdown by level/type
+   */
   getStats(): {
     total: number;
     success: number;
@@ -55,6 +78,9 @@ export class MetricsService {
     };
   }
 
+  /**
+   * Lấy toàn bộ metrics history.
+   */
   getAll(): ChatMetrics[] {
     return this.metricsHistory;
   }

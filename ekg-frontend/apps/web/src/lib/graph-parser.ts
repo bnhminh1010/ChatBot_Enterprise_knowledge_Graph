@@ -1,12 +1,16 @@
 import { GraphData, GraphNode, GraphLink } from "@/components/graph/GraphView";
 
 /**
- * Parse graph data from backend response
- * Detects if response contains graph information and extracts it
+ * Graph Parser - Extract structured graph data from text responses
+ *
+ * Strategies:
+ * 1. Parse JSON if backend sends structured data
+ * 2. Detect employee info pattern and create employee-centric graph
+ * 3. Detect list patterns (list of employees, skills, etc.)
  */
 export function parseGraphFromResponse(response: string): GraphData | null {
   try {
-    // Try to parse as JSON first (if backend sends structured data)
+    // Strategy 1: Try to parse as JSON first
     const parsed = JSON.parse(response);
     if (parsed.nodes && parsed.links) {
       return parsed as GraphData;
@@ -15,342 +19,365 @@ export function parseGraphFromResponse(response: string): GraphData | null {
     // Not JSON, extract from text
   }
 
-  // Extract entities from text response
-  return extractEntitiesFromText(response);
+  // Strategy 2: Detect and parse different response types
+
+  // Check if this is employee info response
+  if (isEmployeeInfoResponse(response)) {
+    return parseEmployeeInfo(response);
+  }
+
+  // Check if this is a list of employees
+  if (isEmployeeListResponse(response)) {
+    return parseEmployeeList(response);
+  }
+
+  // Fallback: Extract general entities
+  return extractGeneralEntities(response);
 }
 
 /**
- * Extract entities and relationships from text
- * Looks for patterns like:
- * - "Employee: X" or "Nhân viên: X"
- * - "Department: Y" or "Phòng ban: Y"
- * - "Skill: Z" or "Kỹ năng: Z"
- * - Lists with bullet points
+ * Check if response contains employee information
  */
-function extractEntitiesFromText(text: string): GraphData | null {
+function isEmployeeInfoResponse(text: string): boolean {
+  const employeeInfoPatterns = [
+    /thông tin.*nhân viên/i,
+    /nhân viên.*:.*mã/i,
+    /họ tên|ho ten/i,
+    /mã nhân viên/i,
+    /phòng ban.*:.*\n/i,
+    /chức danh|chức vụ/i,
+  ];
+  return employeeInfoPatterns.some((p) => p.test(text));
+}
+
+/**
+ * Check if response is a list of employees
+ */
+function isEmployeeListResponse(text: string): boolean {
+  // Vietnamese name pattern appearing multiple times with skill levels
+  const namePattern =
+    /[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+/g;
+  const matches = text.match(namePattern);
+  return matches !== null && matches.length >= 3;
+}
+
+/**
+ * Parse employee information response into graph
+ * Response format:
+ * - Họ tên: X
+ * - Mã: Y
+ * - Phòng ban: Z
+ * - Kỹ năng: A, B, C
+ * - Dự án: P
+ */
+function parseEmployeeInfo(text: string): GraphData | null {
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
-  const nodeMap = new Map<string, GraphNode>();
 
-  // Pattern 1: Extract ALL Vietnamese names (works for "Name (Level), Name (Level)" format)
-  const vietnameseNamePattern =
-    /([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+){1,3})\s*\(([^)]+)\)/g;
+  // Extract employee name
+  const nameMatch =
+    text.match(/(?:họ tên|tên|nhân viên)[:\s]*([^\n,•]+)/i) ||
+    text.match(
+      /(?:anh|chị)\s+([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+){1,2})/
+    );
 
-  const nameMatches = [...text.matchAll(vietnameseNamePattern)];
-
-  if (nameMatches.length > 0) {
-    // Found names with levels (e.g., "Hoàng Yến Nhi (Junior)")
-    nameMatches.forEach((match, idx) => {
-      const name = match[1].trim();
-      const level = match[2].trim();
-
-      if (name.length >= 5) {
-        // Valid name
-        const id = `emp-${idx}`;
-        nodes.push({
-          id,
-          label: name,
-          type: "employee",
-          val: 10,
-        });
-      }
-    });
+  let employeeName = "Unknown";
+  if (nameMatch) {
+    employeeName = nameMatch[1].replace(/[:\*\-]/g, "").trim();
+  } else {
+    // Try to find Vietnamese name pattern
+    const vnNameMatch = text.match(
+      /([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+){2})/
+    );
+    if (vnNameMatch) {
+      employeeName = vnNameMatch[1];
+    }
   }
 
-  // Pattern 2: Extract bullet point items (documents, list items)
-  const bulletPattern = /[•\-\*]\s*([^\n•\-\*]+)/g;
-  const bulletMatches = [...text.matchAll(bulletPattern)];
+  // Create employee node (center)
+  const employeeId = "emp-0";
+  nodes.push({
+    id: employeeId,
+    label: employeeName,
+    type: "employee",
+    val: 10, // Central node
+  });
 
-  // Extract project name from text (e.g., "Dự án X có các tài liệu")
-  const projectMatch = text.match(/[Dd]ự án\s*[""]?([^""]+?)[""]?\s*(?:có|có các|của)/);
-  const projectName = projectMatch ? projectMatch[1].trim() : null;
+  // Extract employee code
+  const codeMatch = text.match(/(?:mã|code|id)[:\s]*([A-Z]{2,4}[_\-]?\d+)/i);
+  if (codeMatch) {
+    // Add as part of employee label instead of separate node
+    const empNode = nodes.find((n) => n.id === employeeId);
+    if (empNode) {
+      empNode.label = `${employeeName}\n(${codeMatch[1]})`;
+    }
+  }
 
-  if (bulletMatches.length > 0 && nodes.length === 0) {
-    // If no employee names found, create nodes from bullet points
-    const docKeywords = /tài liệu|document|hướng dẫn|báo cáo|file/i.test(text);
-
-    // Add project node first if found
-    if (projectName) {
+  // Extract department
+  const deptMatch = text.match(
+    /(?:phòng ban|phòng|department|team)[:\s]*([^\n,•]+)/i
+  );
+  if (deptMatch) {
+    const deptName = deptMatch[1].replace(/[:\*\-]/g, "").trim();
+    if (deptName.length > 2 && deptName.length < 50) {
+      const deptId = "dept-0";
       nodes.push({
-        id: "proj-0",
-        label: projectName.substring(0, 30),
-        type: "project",
-        val: 15,
+        id: deptId,
+        label: deptName,
+        type: "department",
+        val: 8,
+      });
+      links.push({
+        source: employeeId,
+        target: deptId,
+        relationship: "WORKS_IN",
+        value: 2,
       });
     }
-
-    bulletMatches.forEach((match, idx) => {
-      // Clean up label - remove everything in parentheses
-      let label = match[1].trim();
-      label = label.replace(/\s*\([^)]*\)/g, "").trim(); // Remove (xxx)
-      
-      if (label.length > 3 && label.length < 100) {
-        const id = docKeywords ? `doc-${idx}` : `item-${idx}`;
-        nodes.push({
-          id,
-          label: label.substring(0, 35) + (label.length > 35 ? "..." : ""),
-          type: docKeywords ? "document" : "skill",
-          val: 8,
-        });
-
-        // Link document to project if exists
-        if (projectName) {
-          links.push({
-            source: "proj-0",
-            target: id,
-            relationship: "HAS_DOC",
-            value: 2,
-          });
-        }
-      }
-    });
   }
 
-  // Pattern 3: Extract context (skill, department, project)
-  const contextInfo = extractContextFromText(text);
+  // Extract position/role
+  const positionMatch = text.match(
+    /(?:chức danh|chức vụ|vị trí|vai trò|position|role)[:\s]*([^\n,•]+)/i
+  );
+  if (positionMatch) {
+    const posName = positionMatch[1].replace(/[:\*\-]/g, "").trim();
+    if (posName.length > 2 && posName.length < 50) {
+      const posId = "pos-0";
+      nodes.push({
+        id: posId,
+        label: posName,
+        type: "position",
+        val: 6,
+      });
+      links.push({
+        source: employeeId,
+        target: posId,
+        relationship: "HAS_POSITION",
+        value: 1,
+      });
+    }
+  }
 
-  // Add context nodes
-  if (contextInfo.skill) {
-    const skillId = "skill-0";
-    nodes.push({
-      id: skillId,
-      label: contextInfo.skill,
-      type: "skill",
-      val: 12,
-    });
-
-    // Link ALL employees to this skill
-    nodes
-      .filter((n) => n.type === "employee")
-      .forEach((emp) => {
+  // Extract skills
+  const skillsMatch = text.match(/(?:kỹ năng|skills?)[:\s]*([^\n]+)/i);
+  if (skillsMatch) {
+    const skillsText = skillsMatch[1];
+    const skillNames = skillsText.split(/[,;]/);
+    skillNames.forEach((skill, idx) => {
+      const skillName = skill.replace(/[:\*\-\(\)]/g, "").trim();
+      if (
+        skillName.length > 1 &&
+        skillName.length < 30 &&
+        !/^\d+$/.test(skillName)
+      ) {
+        const skillId = `skill-${idx}`;
+        nodes.push({
+          id: skillId,
+          label: skillName,
+          type: "skill",
+          val: 5,
+        });
         links.push({
-          source: emp.id,
+          source: employeeId,
           target: skillId,
           relationship: "HAS_SKILL",
           value: 1,
         });
-      });
+      }
+    });
   }
 
-  if (contextInfo.department) {
-    const deptId = "dept-0";
+  // Extract project(s)
+  const projectMatches = text.matchAll(/(?:dự án|project)[:\s]*([^\n,•]+)/gi);
+  let projIdx = 0;
+  for (const match of projectMatches) {
+    const projName = match[1].replace(/[:\*\-]/g, "").trim();
+    // Filter out labels like "Dự án đang tham gia"
+    if (
+      projName.length > 3 &&
+      projName.length < 60 &&
+      !/đang tham gia|tham gia|hiện tại|đang làm/i.test(projName)
+    ) {
+      const projId = `proj-${projIdx}`;
+      nodes.push({
+        id: projId,
+        label: projName.substring(0, 40) + (projName.length > 40 ? "..." : ""),
+        type: "project",
+        val: 7,
+      });
+      links.push({
+        source: employeeId,
+        target: projId,
+        relationship: "WORKS_ON",
+        value: 2,
+      });
+      projIdx++;
+    }
+  }
+
+  // Extract location
+  const locationMatch = text.match(
+    /(?:chi nhánh|location|địa điểm|văn phòng)[:\s]*([^\n,•]+)/i
+  );
+  if (locationMatch) {
+    const locName = locationMatch[1].replace(/[:\*\-]/g, "").trim();
+    if (locName.length > 1 && locName.length < 30) {
+      const locId = "loc-0";
+      nodes.push({
+        id: locId,
+        label: locName,
+        type: "location",
+        val: 5,
+      });
+      links.push({
+        source: employeeId,
+        target: locId,
+        relationship: "LOCATED_AT",
+        value: 1,
+      });
+    }
+  }
+
+  // Only return if we have meaningful data
+  if (nodes.length > 1) {
+    return { nodes, links };
+  }
+
+  // Return single node graph if we have employee but no connections
+  if (nodes.length === 1) {
+    return { nodes, links };
+  }
+
+  return null;
+}
+
+/**
+ * Parse list of employees (e.g., "employees with React skill")
+ */
+function parseEmployeeList(text: string): GraphData | null {
+  const nodes: GraphNode[] = [];
+  const links: GraphLink[] = [];
+
+  // Extract skill/department context from query
+  const contextMatch =
+    text.match(/(?:biết|có skill|kỹ năng)\s+([A-Za-z.#+]+)/i) ||
+    text.match(/(?:phòng|department)\s+([A-Za-z]+)/i);
+
+  let contextNode: GraphNode | null = null;
+  if (contextMatch) {
+    const contextName = contextMatch[1];
+    const isSkill = /skill|kỹ năng|biết/i.test(text);
+    contextNode = {
+      id: isSkill ? "skill-0" : "dept-0",
+      label: contextName,
+      type: isSkill ? "skill" : "department",
+      val: 18,
+    };
+    nodes.push(contextNode);
+  }
+
+  // Extract Vietnamese names with optional level in parentheses
+  const namePattern =
+    /([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+){1,3})(?:\s*\(([^)]+)\))?/g;
+
+  const matches = [...text.matchAll(namePattern)];
+  const seenNames = new Set<string>();
+
+  matches.forEach((match, idx) => {
+    const name = match[1].trim();
+    const level = match[2]?.trim();
+
+    // Filter out common non-name phrases
+    const blacklist =
+      /thông tin|nhân viên|phòng ban|kỹ năng|dự án|hệ thống|trạng thái|chi nhánh|ngày|tháng|năm|mã|vai trò/i;
+    if (
+      blacklist.test(name) ||
+      name.length < 5 ||
+      seenNames.has(name.toLowerCase())
+    ) {
+      return;
+    }
+
+    seenNames.add(name.toLowerCase());
+    const empId = `emp-${idx}`;
     nodes.push({
-      id: deptId,
-      label: contextInfo.department,
-      type: "department",
-      val: 15,
+      id: empId,
+      label: level ? `${name}\n(${level})` : name,
+      type: "employee",
+      val: 12,
     });
 
-    // Link ALL employees to department
-    nodes
-      .filter((n) => n.type === "employee")
-      .forEach((emp) => {
-        links.push({
-          source: emp.id,
-          target: deptId,
-          relationship: "WORKS_IN",
-          value: 2,
-        });
+    // Link to context if exists
+    if (contextNode) {
+      links.push({
+        source: empId,
+        target: contextNode.id,
+        relationship: contextNode.type === "skill" ? "HAS_SKILL" : "WORKS_IN",
+        value: 1,
       });
-  }
-
-  if (contextInfo.project) {
-    const projId = "proj-0";
-    nodes.push({
-      id: projId,
-      label: contextInfo.project,
-      type: "project",
-      val: 15,
-    });
-
-    // Link documents/items to project
-    nodes
-      .filter((n) => n.type === "document" || n.type === "employee")
-      .forEach((item) => {
-        links.push({
-          source: projId,
-          target: item.id,
-          relationship: item.type === "document" ? "HAS_DOC" : "WORKS_ON",
-          value: 1,
-        });
-      });
-  }
-
-  // If no names found, try original patterns
-  if (nodes.length === 0) {
-    return extractWithOriginalPatterns(text);
-  }
+    }
+  });
 
   return nodes.length > 0 ? { nodes, links } : null;
 }
 
 /**
- * Extract context information (skill, department, project) from text
+ * Extract general entities (fallback)
  */
-function extractContextFromText(text: string): {
-  skill?: string;
-  department?: string;
-  project?: string;
-} {
-  const info: any = {};
-
-  // Extract skill - check both "có skill X" and "biết X"
-  const skillMatch = text.match(
-    /(?:có skill|skill|kỹ năng|biết)\s+([A-Za-z.+#]+)/i
-  );
-  if (skillMatch) {
-    info.skill = skillMatch[1];
-  }
-
-  // Extract department
-  const deptMatch = text.match(
-    /phòng\s+([A-Za-z]+)|([A-Za-z]+)\s+(?:team|phòng)/i
-  );
-  if (deptMatch) {
-    info.department = deptMatch[1] || deptMatch[2];
-  }
-
-  // Extract project
-  const projMatch = text.match(
-    /dự án\s+([A-ZĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+)|project\s+([A-Za-z]+)/i
-  );
-  if (projMatch) {
-    info.project = projMatch[1] || projMatch[2];
-  }
-
-  return info;
-}
-
-/**
- * Original pattern-based extraction (fallback)
- */
-function extractWithOriginalPatterns(text: string): GraphData | null {
+function extractGeneralEntities(text: string): GraphData | null {
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
-  const nodeMap = new Map<string, GraphNode>();
 
-  // Patterns to detect entities
-  const patterns = {
-    employee: /(?:nhân viên|employee)[\s:]*([^\n,•]+?)(?=\n|,|•|$|\(|\-)/gi,
-    department: /(?:phòng ban|department)[\s:]*([^\n,•]+?)(?=\n|,|•|$|\(|\-)/gi,
-    skill: /(?:kỹ năng|skill)[\s:]*([^\n,•]+?)(?=\n|,|•|$|\(|\-)/gi,
-    project: /(?:dự án|project)[\s:]*([^\n,•]+?)(?=\n|,|•|$|\(|\-)/gi,
-    position:
-      /(?:vị trí|chức danh|position)[\s:]*([^\n,•]+?)(?=\n|,|•|$|\(|\-)/gi,
-  };
+  // Only extract clearly labeled entities
+  const patterns: { regex: RegExp; type: string; relationship: string }[] = [
+    {
+      regex: /(?:nhân viên|employee)[:\s]+([^\n,•]+)/gi,
+      type: "employee",
+      relationship: "",
+    },
+    {
+      regex: /(?:phòng ban|department)[:\s]+([^\n,•]+)/gi,
+      type: "department",
+      relationship: "WORKS_IN",
+    },
+    {
+      regex: /(?:kỹ năng|skill)[:\s]+([^\n,•]+)/gi,
+      type: "skill",
+      relationship: "HAS_SKILL",
+    },
+    {
+      regex: /(?:dự án|project)[:\s]+([^\n,•]+)/gi,
+      type: "project",
+      relationship: "WORKS_ON",
+    },
+  ];
 
-  // Extract bullet list items (common in bot responses)
-  const bulletPattern = /[•\-\*]\s*([^•\-\*\n]+?)(?:\(([^)]+)\))?/g;
-  const bulletMatches = [...text.matchAll(bulletPattern)];
+  let firstEmployee: string | null = null;
 
-  // Try to extract structured entities first
-  let foundAny = false;
-
-  Object.entries(patterns).forEach(([type, pattern]) => {
-    const matches = [...text.matchAll(pattern)];
-    matches.forEach((match) => {
-      const label = match[1].trim();
-      if (label && label.length > 0 && label.length < 100) {
+  patterns.forEach(({ regex, type, relationship }) => {
+    const matches = [...text.matchAll(regex)];
+    matches.forEach((match, idx) => {
+      const label = match[1].replace(/[:\*\-\(\)]/g, "").trim();
+      if (label.length > 2 && label.length < 50) {
         const id = `${type}-${nodes.length}`;
-        const node: GraphNode = {
-          id,
-          label,
-          type,
-          val: type === "department" || type === "project" ? 15 : 10,
-        };
-        nodes.push(node);
-        nodeMap.set(label.toLowerCase(), node);
-        foundAny = true;
-      }
-    });
-  });
+        nodes.push({ id, label, type, val: type === "department" ? 15 : 12 });
 
-  // If no structured data, try bullet list
-  if (!foundAny && bulletMatches.length > 0) {
-    bulletMatches.forEach((match, idx) => {
-      const label = match[1].trim();
-      const metadata = match[2]?.trim();
-
-      if (label && label.length > 2) {
-        // Try to guess entity type from context
-        let type = "employee";
-        if (metadata) {
-          if (/frontend|backend|phòng|department/i.test(metadata)) {
-            type = "department";
-          } else if (/react|java|python|skill/i.test(metadata)) {
-            type = "skill";
-          } else if (/project|dự án/i.test(metadata)) {
-            type = "project";
-          }
-        }
-
-        const id = `item-${idx}`;
-        const node: GraphNode = {
-          id,
-          label,
-          type,
-          val: 10,
-        };
-        nodes.push(node);
-        nodeMap.set(label.toLowerCase(), node);
-        foundAny = true;
-
-        // If has metadata, create linked node
-        if (metadata) {
-          const metaId = `meta-${idx}`;
-          const metaType = type === "employee" ? "department" : "skill";
-          const metaNode: GraphNode = {
-            id: metaId,
-            label: metadata,
-            type: metaType,
-            val: 8,
-          };
-          nodes.push(metaNode);
+        if (type === "employee" && !firstEmployee) {
+          firstEmployee = id;
+        } else if (firstEmployee && relationship) {
           links.push({
-            source: id,
-            target: metaId,
-            relationship: type === "employee" ? "WORKS_IN" : "HAS_SKILL",
+            source: firstEmployee,
+            target: id,
+            relationship,
             value: 1,
           });
         }
       }
     });
-  }
+  });
 
-  // Create some default links between nodes if they're mentioned together
-  if (nodes.length >= 2) {
-    // Link employees to departments/projects mentioned in same context
-    const employees = nodes.filter((n) => n.type === "employee");
-    const departments = nodes.filter((n) => n.type === "department");
-    const skills = nodes.filter((n) => n.type === "skill");
-
-    employees.forEach((emp) => {
-      if (departments.length > 0 && Math.random() > 0.3) {
-        links.push({
-          source: emp.id,
-          target: departments[0].id,
-          relationship: "WORKS_IN",
-          value: 2,
-        });
-      }
-      if (skills.length > 0 && Math.random() > 0.5) {
-        links.push({
-          source: emp.id,
-          target: skills[Math.floor(Math.random() * skills.length)].id,
-          relationship: "HAS_SKILL",
-          value: 1,
-        });
-      }
-    });
-  }
-
-  // If we found entities, return graph data
-  if (foundAny && nodes.length > 0) {
-    return { nodes, links };
-  }
-
-  // Otherwise return null (will use sample data)
-  return null;
+  return nodes.length > 0 ? { nodes, links } : null;
 }
 
 /**
@@ -358,29 +385,18 @@ function extractWithOriginalPatterns(text: string): GraphData | null {
  */
 export function createSampleGraphData(): GraphData {
   const nodes: GraphNode[] = [
-    { id: "emp1", label: "Nguyễn Văn A", type: "employee", val: 10 },
-    { id: "emp2", label: "Trần Thị B", type: "employee", val: 10 },
-    { id: "emp3", label: "Lê Văn C", type: "employee", val: 10 },
-    { id: "dept1", label: "Frontend", type: "department", val: 15 },
-    { id: "dept2", label: "Backend", type: "department", val: 15 },
-    { id: "skill1", label: "React", type: "skill", val: 8 },
-    { id: "skill2", label: "TypeScript", type: "skill", val: 8 },
-    { id: "skill3", label: "NestJS", type: "skill", val: 8 },
-    { id: "proj1", label: "EKG Project", type: "project", val: 12 },
+    { id: "emp1", label: "Nguyễn Văn A", type: "employee", val: 15 },
+    { id: "dept1", label: "Phòng IT", type: "department", val: 18 },
+    { id: "skill1", label: "React", type: "skill", val: 12 },
+    { id: "skill2", label: "TypeScript", type: "skill", val: 12 },
+    { id: "proj1", label: "EKG Project", type: "project", val: 14 },
   ];
 
   const links: GraphLink[] = [
     { source: "emp1", target: "dept1", relationship: "WORKS_IN", value: 2 },
-    { source: "emp2", target: "dept1", relationship: "WORKS_IN", value: 2 },
-    { source: "emp3", target: "dept2", relationship: "WORKS_IN", value: 2 },
     { source: "emp1", target: "skill1", relationship: "HAS_SKILL", value: 1 },
     { source: "emp1", target: "skill2", relationship: "HAS_SKILL", value: 1 },
-    { source: "emp2", target: "skill1", relationship: "HAS_SKILL", value: 1 },
-    { source: "emp3", target: "skill2", relationship: "HAS_SKILL", value: 1 },
-    { source: "emp3", target: "skill3", relationship: "HAS_SKILL", value: 1 },
-    { source: "emp1", target: "proj1", relationship: "WORKS_ON", value: 1 },
-    { source: "emp2", target: "proj1", relationship: "WORKS_ON", value: 1 },
-    { source: "emp3", target: "proj1", relationship: "WORKS_ON", value: 1 },
+    { source: "emp1", target: "proj1", relationship: "WORKS_ON", value: 2 },
   ];
 
   return { nodes, links };
@@ -388,9 +404,15 @@ export function createSampleGraphData(): GraphData {
 
 /**
  * Check if we should show graph visualization
- * Always show for any assistant response with content
  */
 export function shouldShowGraph(message: string): boolean {
-  // Always show graph button if message has meaningful content (> 20 chars)
-  return !!(message && message.trim().length > 20);
+  // Show graph for responses with employee/project/department mentions
+  const graphPatterns = [
+    /nhân viên|employee/i,
+    /phòng ban|department/i,
+    /dự án|project/i,
+    /kỹ năng|skill/i,
+    /danh sách/i,
+  ];
+  return message.length > 50 && graphPatterns.some((p) => p.test(message));
 }
