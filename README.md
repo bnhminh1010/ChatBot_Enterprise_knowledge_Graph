@@ -333,7 +333,7 @@ GET    /auth/profile           # Get current user info
 Dự án thuộc **Đồ án chuyên ngành – Khoa Công nghệ Thông tin, Đại học HUTECH**.  
 Tác giả giữ toàn quyền với mã nguồn và nội dung.
 
-📧 **Liên hệ nhóm:** team4.ekg.aptx3107@gmail.com  
+📧 **Liên hệ nhóm:** team4.ekg.aptx3107@gmail.com  , minhvip1982004@gmail.com
 📍 **Trường Đại học Công nghệ TP.HCM – HUTECH**
 
 ---
